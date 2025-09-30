@@ -60,8 +60,6 @@ Electrocardiogram (ECG) interpretation is essential for cardiovascular disease d
 ### Dataset 
 
 Datasets we used:
-- **MIMIC-IV-ECG**: We downloaded the [MIMIC-IV-ECG](https://physionet.org/content/mimic-iv-ecg/1.0/) dataset as the ECG signals and paired ECG reports.
-
 - **PTB-XL**: We downloaded the [PTB-XL](https://physionet.org/content/ptb-xl/1.0.3/) dataset which consisting four subsets, Superclass, Subclass, Form, Rhythm.
 
 - **CPSC2018**: We downloaded the [CPSC2018](http://2018.icbeb.org/Challenge.html) dataset which consisting three training sets. 
@@ -82,19 +80,9 @@ cd ./scr_fed/cifar10
 python main.py
 ```
 
-## 💭 Correspondence
-If you have any questions, please contact me via [email](h.y.li@tue.nl) or open an [issue](https://github.com/Decentralized-AI-Reserach-Lab/FedNS/issues).
 
-## Citing FedNS
-The code repository for "[Collaboratively Learning Federated Models from Noisy Decentralized Data](https://arxiv.org/abs/2409.02189)" (IEEE BigData 2024) in PyTorch.  If you use any content of this repo for your work, please cite the following bib entry: 
+## Citing ZETA
 
 ```bibtex
-@inproceedings{li2024collaboratively,
-  title={Collaboratively Learning Federated Models from Noisy Decentralized Data},
-  author={Li, Haoyuan and Funk, Mathias and G{\"u}rel, Nezihe Merve and Saeed, Aaqib},
-  booktitle={2024 IEEE International Conference on Big Data (BigData)},
-  pages={7879--7888},
-  year={2024},
-  organization={IEEE}
-}
+
 ```

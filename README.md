@@ -49,11 +49,6 @@ Electrocardiogram (ECG) interpretation is essential for cardiovascular disease d
 - **📊 Transparent Evaluation:** Interpretability metrics and qualitative diagnostics support actionable insights beyond accuracy.
 
 ## 🔧 Requirements
-###  Environment 
-1. [torch 2.2.0+cu118](https://github.com/pytorch/pytorch)
-2. [torchvision 0.17.0+cu118](https://github.com/pytorch/vision)
-3. [numpy 1.21.6](https://github.com/numpy/numpy.git)
-3. [flwr 0.6.12](https://github.com/adap/flower)
 
 ### Dataset 
 

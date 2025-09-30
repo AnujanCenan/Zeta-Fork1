@@ -23,8 +23,6 @@
 <div align="center">
 
 [![arXiv](https://img.shields.io/badge/arXiv-2409.02189-blue?logo=arxiv&logoColor=orange)](https://arxiv.org/html/2410.14464v1)
-[![Google Scholar](https://img.shields.io/badge/Google%20Scholar-Citations-purple.svg)](https://scholar.google.nl/scholar?cluster=4185769924704359587&hl=zh-CN&as_sdt=0,5&as_vis=1)
-[![Project Page](https://img.shields.io/badge/Project%20Page-Online-brightgreen)](https://tang-jia-lu.github.io/projects/ECG_QA/)
 [![ACM ICMI 2025](https://img.shields.io/badge/ACM%20ICMI%202024-Accepted-yellow.svg)](https://icmi.acm.org/2025/)
 </div>
 
@@ -32,7 +30,7 @@
 
 [10/2024] Arxiv has been released.
 
-[04/2025] Accepted to CHIL 2025
+[04/2025] Accepted to xxx
 
 [04/2025] [Code](link) & [Model](link) has been released.
 

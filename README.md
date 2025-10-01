@@ -69,7 +69,7 @@ The generated observations undergo review and validation by a doctor (specializi
 To prepare your experiment, please setup your configuration at the main.py. You can configure the specific federated learning strategy at server.py. You can simply execute the main script them to run the experiment, the results will save as a `logs` file.
 
 ```
-cd ./scr_fed/cifar10
+cd ./ZETA
 python main.py
 ```
 

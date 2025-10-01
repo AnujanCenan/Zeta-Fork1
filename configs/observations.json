@@ -1,0 +1,1134 @@
+{
+    "AQW": {
+        "P": [
+            "abnormal q wave morphology",
+            "no evidence of bundle branch block",
+            "abnormal q wave morphology"
+        ],
+        "N": [
+            "wide qrs complex",
+            "prolonged qt interval",
+            "wide qrs complex"
+        ]
+    },
+    "UW": {
+        "P": [
+            "u waves following t waves",
+            "prominent u waves"
+        ],
+        "N": [
+            "u waves merged with t waves",
+            "normal p wave"
+        ]
+    },
+    "SR": {
+        "P": [
+            "regular and consistent pp intervals",
+            "stable pr interval within normal range",
+            "normal qrs morphology",
+            "normal p wave morphology",
+            "normal qt interval"
+        ],
+        "N": [
+            "variable pp intervals",
+            "variable pr interval",
+            "widened qrs complex",
+            "atrial fibrillation",
+            "ventricular tachycardia"
+        ]
+    },
+    "WPW": {
+        "P": [
+            "delta wave present",
+            "short pr interval (<120 ms)",
+            "wide qrs complex",
+            "fusion of normal conduction with accessory pathway activation"
+        ],
+        "N": [
+            "absence of delta wave",
+            "left atrial enlargement",
+            "increased p wave duration",
+            "narrow qrs complexes without preexcitation"
+        ]
+    },
+    "AT": {
+        "P": [
+            "fixed pp interval",
+            "abnormal p wave morphology"
+        ],
+        "N": [
+            "pp interval variation",
+            "normal p wave morphology"
+        ]
+    },
+    "VB": {
+        "P": [
+            "different axis of alternate beats",
+            "fixed rr-interval",
+            "ventricular bigeminie pattern with a fixed coupling interval"
+        ],
+        "N": [
+            "stable rr intervals",
+            "absence of compensatory pause",
+            "no av block"
+        ]
+    },
+    "ARS": {
+        "P": [
+            "normal qrs complex",
+            "negative qrs in lead i"
+        ],
+        "N": [
+            "wide qrs complexes",
+            "dominant r wave in lead i"
+        ]
+    },
+    "STTC": {
+        "P": [
+            "altered st-t relationship",
+            "prolonged qt interval"
+        ],
+        "N": [
+            "uniform st segment slope",
+            "normal qt interval"
+        ]
+    },
+    "SA": {
+        "P": [
+            "Changes correlate with respiration",
+            "irregular rr interval"
+        ],
+        "N": [
+            "regular HRV",
+            "regular rr interval"
+        ]
+    },
+    "STE": {
+        "P": [
+            "st elevation in leads with dominant q waves",
+            "j point elevation in leads v1-v3",
+            "st segment elevation in multiple leads"
+        ],
+        "N": [
+            "no st elevation in leads with dominant q waves",
+            "normal qt interval",
+            "no arrhythmias"
+        ]
+    },
+    "VPB": {
+        "P": [
+            "broad qrs complex morphology",
+            "no p wave before ventricular ectopic beat",
+            "retrograde p waves",
+            "abnormal qrs morphology"
+        ],
+        "N": [
+            "consistent qrs morphology",
+            "p wave before beats",
+            "stable pr interval",
+            "normal qrs morphology"
+        ]
+    },
+    "TWO": {
+        "P": [
+            "discordant t wave axis",
+            "t wave inversion in leads with prominent r waves",
+            "stsegment depression with t wave inversion",
+            "t wave polarity opposite to qrs complex",
+            "symmetrical t wave inversion"
+        ],
+        "N": [
+            "t wave axis follows qrs axis",
+            "t wave inversion limited to a single leads",
+            "normal pr interval",
+            "upright t waves in leads v4-v6",
+            "flattened t waves"
+        ]
+    },
+    "STTU": {
+        "P": [
+            "upward sloping st segment",
+            "tall t waves in leads v1-v3",
+            "st segment elevation in multiple leads"
+        ],
+        "N": [
+            "horizontal st segments",
+            "normal qt interval",
+            "no arrhythmias"
+        ]
+    },
+    "ALS": {
+        "P": [
+            "axis < -30",
+            "dominant r waves in avl",
+            "negative qrs complexes in lead ii",
+            "positive qrs complexes in lead qvl",
+            "may indicate left anterior fascicular block"
+        ],
+        "N": [
+            "normal axis range (-30 to +90)",
+            "right axis deviation",
+            "positive qrs complexes in lead ii",
+            "negative qrs complexes in lead avl",
+            "right axis deviation"
+        ]
+    },
+    "APB": {
+        "P": [
+            "premature qrs following normal p wave",
+            "premature p waves with normal or near normal qrs complexes",
+            "rate often normal or near normal"
+        ],
+        "N": [
+            "delta wave",
+            "sustained tachycardia",
+            "prolonged qt interval"
+        ]
+    },
+    "2AVB": {
+        "P": [
+            "progressive elongation of pr-interval each beat",
+            "consistent qrs morphology",
+            "regular p waves",
+            "progressive prolongation of the pr interval"
+        ],
+        "N": [
+            "fixed pr-interval",
+            "change in qrs morphology",
+            "irregular p wave morphology",
+            "fixed pr interval"
+        ]
+    },
+    "2AVB1": {
+        "P": [
+            "progressive elongation of pr-interval each beat",
+            "consistent qrs morphology",
+            "regular p waves",
+            "progressive prolongation of the pr interval"
+        ],
+        "N": [
+            "fixed pr-interval",
+            "change in qrs morphology",
+            "irregular p wave morphology",
+            "fixed pr interval"
+        ]
+    },
+    "PRIE": {
+        "P": [
+            "regular p waves before each qrs",
+            "first degree av block pattern",
+            "p wave axis deviation",
+            "regular p waves before each qrs",
+            "variable pr intervals"
+        ],
+        "N": [
+            "dropped qrs complexes",
+            "normal av conduction",
+            "normal st segment and t waves",
+            "dropped qrs complexes",
+            "constant pr intervals"
+        ]
+    },
+    "CCR": {
+        "P": [
+            "lead avf with negative qrs",
+            "lead ii and iii with small r waves",
+            "left axis deviation",
+            "r/s ratio >1 in v1",
+            "prominent anterior forces"
+        ],
+        "N": [
+            "lead avf with positive qrs",
+            "lead in ii and iii with normal r waves",
+            "normal p wave axis",
+            "decreasing r wave amplitude v1-v3",
+            "dominant s waves in v1-v2"
+        ]
+    },
+    "CR": {
+        "P": [
+            "prominent posterior forces",
+            "right axis deviation",
+            "lead i with negative qrs",
+            "absence of left axis deviation",
+            "s wave in lead avl > 15 mm"
+        ],
+        "N": [
+            "dominant r waves in v1-v2",
+            "normal qt interval",
+            "lead i with balanced qrs",
+            "presence of left axis deviation",
+            "absence of j point elevation"
+        ]
+    },
+    "AF": {
+        "P": [
+            "irregular rhythm",
+            "often rapid hr, can be slow as well",
+            "constant flutter wave morphology",
+            "variable ventricular response"
+        ],
+        "N": [
+            "regular rhythm",
+            "normal hr",
+            "discrete p waves visible",
+            "consistent ventricular response"
+        ]
+    },
+    "AVB": {
+        "P": [
+            "fixed pr prolongation across all beats",
+            "normal p wave morphology",
+            "p waves present but not followed by qrs",
+            "prolonged pr interval > 200 ms",
+            "bundle branch block pattern"
+        ],
+        "N": [
+            "pr interval shortening with faster rates",
+            "retrograde p waves visible",
+            "normal qrs duration",
+            "normal qrs axis",
+            "absence of escape beats"
+        ]
+    },
+    "QTIE": {
+        "P": [
+            "qt interval >460ms in females",
+            "prolonged qtc",
+            "prolonged qtc (corrected qt interval)",
+            "u waves present",
+            "prolonged qt interval in multiple leads"
+        ],
+        "N": [
+            "delta waves present",
+            "normal qtc",
+            "normal qtc",
+            "absence of u waves",
+            "normal st segment morphology"
+        ]
+    },
+    "LBBB": {
+        "P": [
+            "broad notched r wave in leads i avl v5-v6",
+            "r wave peak in time is delayed in leads v5-v6",
+            "broad, notched r wave in leads i, avl, v5-v6",
+            "st-t changes are present in the lateral leads.",
+            "qrs duration >120ms"
+        ],
+        "N": [
+            "early r wave progression v1-v3",
+            "r wave peak in time is normal in lead v5-v6",
+            "early r wave progression in v1-v3",
+            "no st-t changes are present in the lateral leads.",
+            "qrs duration <120ms"
+        ]
+    },
+    "VEB": {
+        "P": [
+            "abnormal qrs morphology",
+            "escape beat with a long coupling interval",
+            "wide qrs complex"
+        ],
+        "N": [
+            "normal qrs morphology",
+            "normal pr interval",
+            "narrow qrs complex"
+        ]
+    },
+    "SVT": {
+        "P": [
+            "narrow qrs complexes",
+            "hr typically >100bpms",
+            "rapid heart rate (>100 bpm)",
+            "regular rr intervals"
+        ],
+        "N": [
+            "wide qrs complexes",
+            "normal heart rate",
+            "slow heart rate (<100 bpm)",
+            "irregular rr intervals"
+        ]
+    },
+    "RBBB": {
+        "P": [
+            "rsr' in v1 and v2",
+            "secondary r wave in v1 larger than initial r",
+            "delayed r wave peak time in right precordial leads",
+            "qrs duration > 120 ms",
+            "st depression and t wave inversion in leads v1-v3"
+        ],
+        "N": [
+            "dominant s wave in v1",
+            "qrs duration <120ms",
+            "early transition in precordial leads",
+            "normal qrs duration (< 120 ms)",
+            "no st depression or t wave inversion in leads v1-v3"
+        ]
+    },
+    "1AVB": {
+        "P": [
+            "regular pr-interval before each complex",
+            "pr interval >200ms",
+            "normal p-wave morphology",
+            "stable pr interval duration",
+            "no ventricular pre-excitation"
+        ],
+        "N": [
+            "variable pr-interval",
+            "pr interval <200ms",
+            "abnormal p wave morphology",
+            "instable pr interval duration",
+            "no right ventricular hypertrophy"
+        ]
+    },
+    "STDD": {
+        "P": [
+            "j point depression in leads v1-v3",
+            "stsegment depression in multiple leads",
+            "downsloping st segment",
+            "j-point depression",
+            "downsloping st segment in leads v1-v3"
+        ],
+        "N": [
+            "no arrhytmias",
+            "normal p wave morphology",
+            "concave upward st morphology",
+            "early repolarization pattern",
+            "normal qrs complex"
+        ]
+    },
+    "MI": {
+        "P": [
+            "t wave inversion in v1-v4",
+            "reciprocal st depression in ii, iii, avf",
+            "inverted t waves in anterior leads.",
+            "loss of r wave progression in precordial leads.",
+            "prolonged qrs duration in anterior leads."
+        ],
+        "N": [
+            "preserved r wave progression",
+            "upright t waves in v1-v4",
+            "t waves are upright in anterior leads.",
+            "r wave progression is normal in precordial leads.",
+            "qrs duration is within normal range in anterior leads."
+        ]
+    },
+    "AFIB": {
+        "P": [
+            "often rapir hr",
+            "varying rr intervals"
+        ],
+        "N": [
+            "normal hr",
+            "constant rr intervals"
+        ]
+    },
+    "TWC": {
+        "P": [
+            "t wave plattening",
+            "t wave inversion in multiple leads",
+            "tall, peaked t waves"
+        ],
+        "N": [
+            "stable ta wave axis",
+            "normal qrs complexes",
+            "normal qt interval"
+        ]
+    },
+    "PWC": {
+        "P": [
+            "p wave axis deviation",
+            "p wave amplitude increase",
+            "p wave duration increase",
+            "p wave axis deviation",
+            "p wave morphology changes"
+        ],
+        "N": [
+            "st segment depression",
+            "normal pr interval duration",
+            "no evidence of ventricular hypertrophy",
+            "no arrhytmias or conduction disturbances",
+            "normal qt interval duration"
+        ]
+    },
+    "ERV": {
+        "P": [
+            "st elevation most prominent in v2-v5",
+            "st segment elevation",
+            "noteched j point"
+        ],
+        "N": [
+            "st segment depression",
+            "lack of left ventricular hypertrophy",
+            "normal r wave amplitude"
+        ]
+    },
+    "RVH": {
+        "P": [
+            "deep s waves in v5-v6",
+            "p pulmonale in ii, iii, avf",
+            "r/s ratio > 1 in v1",
+            "p pulmonale",
+            "s wave amplitude increased in lead v6"
+        ],
+        "N": [
+            "small r waves in v1",
+            "normal p wave amplitude",
+            "regular qrs progression",
+            "normal p wave morphology",
+            "no evidence of left ventricular hypertrophy"
+        ]
+    },
+    "LVH": {
+        "P": [
+            "tall r wave in v5-v6",
+            "st-t wave changes in lateral leads",
+            "high voltage r waves in left-sided leads",
+            "left axis deviation"
+        ],
+        "N": [
+            "dominant r wave in v1",
+            "slim qrs complexes",
+            "normal voltage r waves",
+            "normal axis"
+        ]
+    },
+    "ST": {
+        "P": [
+            "HR typically >100bpm",
+            "p waves may be abnormal or absent",
+            "tachycardia"
+        ],
+        "N": [
+            "normal heart rate",
+            "normal p waves",
+            "bradycardia"            
+        ]
+    },
+    "JEB": {
+        "P": [
+            "regular escape rhythm 40-60 bpm",
+            "narrow qrs complex",
+            "short pr interval",
+            "narrow qrs morphology",
+            "premature qrs complex"
+        ],
+        "N": [
+            "variable rr intervals",
+            "normal r wave progression",
+            "normal p wave duration",
+            "wide qrs morphology",
+            "all qrs complexes preceded by p waves"
+        ]
+    },
+    "PAC": {
+        "P": [
+            "irregular rhythm",
+            "different pr-interval",
+            "early p wave with different morphology"
+        ],
+        "N": [
+            "regular rhythm",
+            "consistent pr-interval",
+            "regular p wave timing"
+        ]
+    },
+    "DIG": {
+        "P": [
+            "sagging st depression",
+            "inverted or biphasic t waves",
+            "shortened qt interval"
+        ],
+        "N": [
+            "peaked t waves",
+            "pathological q waves",
+            "normal qt interval"
+        ]
+    },
+    "HVOLT": {
+        "P": [
+            "total voltage criteria exceeded",
+            "normal pwave morphology"
+        ],
+        "N": [
+            "reduced qrs amplitudes",
+            "right axis deviation"
+        ]
+    },
+    "STD": {
+        "P": [
+            "stsegment changes may be dynamic",
+            "st depression maximal in v4-v6"
+        ],
+        "N": [
+            "normal rr interval",
+            "j point elevation"
+        ]
+    },    
+    "LPR": {
+        "P": [
+            "regular pwaves proceding each qrs",
+            "consistent prolongation of pr interval across multiple beats",
+            "fixed pr prolongation across all leads",
+            "prolonged pr interval > 200 ms"
+        ],
+        "N": [
+            "p waves buried in t waves",
+            "pr interval less than 200ms",
+            "second degree av block pattern",
+            "variable pr interval"
+        ]
+    },
+    "ISCI": {
+        "P": [
+            "st depression in leads ii, iii, avf",
+            "increased qt interval in leads ii, iii, and avf",
+            "prolonged qt interval in inferior leads",
+            "poor r wave progression in inferior leads",
+            "reduced r wave amplitude in leads ii, iii, and avf"
+        ],
+        "N": [
+            "upright t waves in v1-v6",
+            "no stsegment changes",
+            "normal qt interval in inferior leads",
+            "normal r wave progression in inferior leads",
+            "normal pr interval"
+        ]
+    },
+    "QWAVE": {
+        "P": [
+            "q waves in multiple leads",
+            "q waves persisting across serial ecg recordings",
+            "q waves present in inferior leads (ii, iii, avf)",
+            "q waves present in anterior leads (v1–v4)"
+        ],
+        "N": [
+            "normal qrs complex morphology",
+            "isolated q waves without regional distribution",
+            "absence of q waves in contiguous leads",
+            "normal r wave progression in precordial leads"
+        ]
+    },
+    "VCLVH": {
+        "P": [
+            "s wave in lead iii > 25 mm",
+            "r wave in lead i > 14 mm",
+            "presence of strain pattern in lateral leads with tall r waves"
+        ],
+        "N": [
+            "t wave morphology within normal limits",
+            "r wave in lead avl ≤ 11 mm",
+            "no excessive s wave depth in precordial leads"
+        ]
+    },
+    "NDT": {
+        "P": [
+            "normal st segments",
+            "t wave inversion in leads i, ii, or v4-v6",
+            "nonspecific t wave changes",
+            "normal qrs complex"
+        ],
+        "N": [
+            "prolonged qt interval",
+            "upright t waves in leads i, ii, and v4-v6",
+            "pathological q waves",
+            "abnormal qrs morphology"
+        ]
+    },
+    "TAB": {
+        "P": [
+            "t wave flattening",
+            "no st segment elevation",
+            "notched t-waves"
+        ],
+        "N": [
+            "symmetric t wave morphology",
+            "right bundle branch block",
+            "non-specific st segment changes"
+        ]
+    },
+    "LOWT": {
+        "P": [
+            "low amplitude t waves (<10% of r wave amplitude)",
+            "no significant st segment changes"
+        ],
+        "N": [
+            "normal t wave amplitude",
+            "no abnormal q waves"
+        ]
+    },
+    "ABQRS": {
+        "P": [
+            "qrs duration > 120ms",
+            "abnormal axis deviation"
+        ],
+        "N": [
+            "regular pp interval",
+            "normal t wave morphology"
+        ]
+    },
+    "LNGQT": {
+        "P": [
+            "prolonged qt interval >440ms",
+            "normal st segment",
+            "late onset t waves",
+            "normal heart rate"
+        ],
+        "N": [
+            "short qt interval <350ms",
+            "stsegment deviations",
+            "j point elevation",
+            "inverted t waves"
+        ]
+    },
+    "PRC(S)": {
+        "P": [
+            "aberrant qrs morphology",
+            "premature ventricular complexes",
+            "compensatory pause follows",
+            "wide qrs complex",
+            "normal qt interval"
+        ],
+        "N": [
+            "normal qrs duration",
+            "non-specific st segment changes",
+            "fixed coupling interval",
+            "left axis deviation",
+            "prolonged qt interval"
+        ]
+    },
+    "NT": {
+        "P": [
+            "no significant st segment changes",
+            "transient t wave flattening in precordial leads"
+        ],
+        "N": [
+            "no abnormal q waves",
+            "no biphasic or flattened t wave patterns"
+        ]
+    },
+    "NST": {
+        "P": [
+            "st segment sloping",
+            "variable st morphology"
+        ],
+        "N": [
+            "st elevation > 1mm",
+            "convex st elevation"
+        ]
+    },
+    "PVC": {
+        "P": [
+            "broad qrs complex morphology",
+            "irregular rhythm because of pvc"
+        ],
+        "N": [
+            "normal qrs duration",
+            "p-wave before complex"
+        ]
+    },
+    "INVT": {
+        "P": [
+            "symmetric t wave inversion",
+            "deep t wave inversion >2mm",
+            "deep t-wave inversion"
+        ],
+        "N": [
+            "flattened t waves",
+            "twave burried in stsegment",
+            "flat t-waves"
+        ]
+    },
+    "LVOLT": {
+        "P": [
+            "qrs amplitude less than 5mm in limb leads",
+            "normal qt interval"
+        ],
+        "N": [
+            "high qrs voltage",
+            "prolonged qt interval"
+        ]
+    },
+    "VPC": {
+        "P": [
+            "compensatory pause following premature beat",
+            "premature ventricular contractions"
+        ],
+        "N": [
+            "no compensatory pause",
+            "normal p wave morphology"
+        ]
+    },
+    "NORM": {
+        "P": [
+            "normal qrs duration",
+            "normal qt interval",
+            "normal axis",
+            "normal pr interval",
+            "normal qrs complex"
+        ],
+        "N": [
+            "abnormal qrs duration",
+            "abnormal qt interval",
+            "axis deviation",
+            "no conduction abnormalities",
+            "no st segment shifts"
+        ]
+    },
+    "CRBBB": {
+        "P": [
+            "rsr' pattern in v1 and v2",
+            "wide s wave",
+            "wide qrs complex (>120 ms)"
+        ],
+        "N": [
+            "dominant s wave in v1",
+            "narrow s wave",
+            "normal or narrow p wave"
+        ]
+    },
+    "CLBBB": {
+        "P": [
+            "qrs duration > 120ms",
+            "increased r wave duration"
+        ],
+        "N": [
+            "rsr pattern in v1",
+            "normal r wave progression in precordial leads"
+        ]
+    },
+    "SVARR": {
+        "P": [
+            "multiple p wave morphology",
+            "p-waves present but may be irregular",
+            "evidence of supraventricular arrhythmia"
+        ],
+        "N": [
+            "no supraventricular arrhythmia detected",
+            "sinus rhythm without fibrillation",
+            "abnormal qrs morphology"
+        ]
+    },
+    "BIGU": {
+        "P": [
+            "alternating normal and premature supraventricular beats",
+            "normal qrs complex after premature beats",
+            "premature p waves",
+            "regular pattern of premature beats",
+            "alternating premature ventricular contractions"
+        ],
+        "N": [
+            "consistently regular rr intervals",
+            "variable p wave axis",
+            "multiple coupling intervals",
+            "variable pr interval",
+            "no evidence of av block"
+        ]
+    },
+    "STACH": {
+        "P": [
+            "regular rhythm with consistent p waves",
+            "rapid but organized rhythm",
+            "heart rate above 100 bpm",
+            "p wave is upright in leads i and ii"
+        ],
+        "N": [
+            "irregular rhythm with absent or inconsistent p waves",
+            "t wave inversion",
+            "ectopic beats present",
+            "lack of pr interval prolongation"
+        ]
+    },
+    "SARRH": {
+        "P": [
+            "Changes correlate with respiration",
+            "irregular rr interval"
+        ],
+        "N": [
+            "regular HRV",
+            "regular rr interval"
+        ]
+    },
+    "SB": {
+        "P": [
+            "consistent qrs morphology",
+            "normal p wave morphology",
+            "normal p wave morphology",
+            "p-waves present and regular"
+        ],
+        "N": [
+            "change in qrs morphology",
+            "change in p wave morphology",
+            "qrs widening",
+            "irregular r-r interval"
+        ]
+    },
+    "SBRAD": {
+        "P": [
+            "hr <60bpm",
+            "consistent qrs morphology",
+            "normal qrs",
+            "normal p wave morphology"
+        ],
+        "N": [
+            "hr >60bpm",
+            "change in qrs morphology",
+            "qrs widening",
+            "change in p wave morphology"
+        ]
+    },
+    "TRIGU": {
+        "P": [
+            "consistent premature beat morphology",
+            "preserved p waves before premature beats",
+            "grouping of beats in threes"
+        ],
+        "N": [
+            "changing underlying rhythm",
+            "beat grouping in fours",
+            "frequent premature ventricular contractions"
+        ]
+    },
+    "SVTAC": {
+        "P": [
+            "hr typically >100bpms",
+            "sudden onset rate increase",
+            "sudden onset rapid rhythm",
+            "narrow qrs complex (less than 0.12 seconds)",
+            "short pr interval (less than 0.12 seconds)"
+        ],
+        "N": [
+            "normal heart rate",
+            "gradual rate increase",
+            "gradual rate increase",
+            "no evidence of av block",
+            "absence of t wave abnormalities"
+        ]
+    },
+    "PSVT": {
+        "P": [
+            "p waves hidden in t waves",
+            "regular rhythm",
+            "regular, narrow qrs complex tachycardia"
+        ],
+        "N": [
+            "irregular rr intervals",
+            "irregular rhythm",
+            "irregular rhythm"
+        ]
+    },
+    "AFLT": {
+        "P": [
+            "regular atrial rate 300bpm",
+            "sawtooth pattern",
+            "variable ventricular response",
+            "abnormal p wave morphology"
+        ],
+        "N": [
+            "variable atrial rate",
+            "flat baseline",
+            "normal atrial rate",
+            "absence of t wave abnormalities"
+        ]
+    },
+    "PACE": {
+        "P": [
+            "Presence of regular pacing spikes",
+            "Consistent spike-QRS relationship",
+            "Wide, consistent QRS complexes (paced)"
+        ],
+        "N": [
+            "Absence of pacing spikes",
+            "No spike-QRS relationship",
+            "Narrow, physiological QRS complex"
+        ]
+    },
+    "AMI": {
+        "P": [
+            "loss of r waves v1-v4",
+            "reciprocal changes ii, iii, avf",
+            "reduced r wave amplitude in anterior leads"
+        ],
+        "N": [
+            "normal r progression",
+            "preserved r waves in v1-v4",
+            "normal r wave progression in inferior leads"
+        ]
+    },
+    "LAFB/LPFB": {
+        "P": [
+            "left or right axis",
+            "prolonged qrs duration",
+            "rs pattern in leads ii, iii, avf",
+            "poor r wave progression"
+        ],
+        "N": [
+            "narrow qrs complex",
+            "normal qrs duration",
+            "regular pr interval",
+            "normal t wave morphology"
+        ]
+    },
+    "IMI": {
+        "P": [
+            "stelevation in ii, iii, avf",
+            "inverted t waves in leads ii, iii, avf",
+            "st segment depression in leads i and avl"
+        ],
+        "N": [
+            "lateral stelevation",
+            "normal t segments",
+            "isoelectric st segment in leads i and avl"
+        ]
+    },
+    "SEHYP": {
+        "P": [
+            "notching of the r wave in v1-2",
+            "left axis deviation",
+            "notching of the r wave in leads v1-v2"
+        ],
+        "N": [
+            "decreased r-wave and t-wave flattening in v4-6",
+            "low voltage qrs complexes",
+            "decreased r wave amplitude in leads v4-v6"
+        ]
+    },
+    "LAO/LAE": {
+        "P": [
+            "biphasic p wave in lead v1",
+            "p wave amplitude >0.25mv"
+        ],
+        "N": [
+            "normal p wave in lead v1",
+            "positive p waves in v1"
+        ]
+    },
+    "ISC": {
+        "P": [
+            "symmetrical t wave inversion",
+            "non-specific st-t changes",
+            "no q wave in leads with st segment depression",
+            "horizontal st depression",
+            "normal or flattened t wave in leads with st segment depression"
+        ],
+        "N": [
+            "fixed st changes",
+            "no flat t waves",
+            "normal p wave morphology",
+            "upsloping st segments",
+            "no ventricular pre-excitation"
+        ]
+    },
+    "RAO/RAE": {
+        "P": [
+            "p wave duration >120ms",
+            "biphasic p wave in v1 with terminal negative deflection"
+        ],
+        "N": [
+            "notched p waves",
+            "monophasic p wave in v1"
+        ]
+    },
+    "LMI": {
+        "P": [
+            "pathological q waves in leads i, avl, v5-6",
+            "stsegment elevation in the above leads",
+            "st elevation in leads i and avl",
+            "q waves in leads i and avl",
+            "increased qt interval"
+        ],
+        "N": [
+            "normal q waves",
+            "normal r wave progression in precordial leads",
+            "regular rhythm",
+            "normal p waves",
+            "no change in the frontal plane axis"
+        ]
+    },
+    "ILBBB": {
+        "P": [
+            "left axis deviation",
+            "small q waves in lateral leads",
+            "slurred r wave in i, avl, v5-v6",
+            "small q waves in lateral leads",
+            "broad, notched r wave in leads i, avl, v5, v6"
+        ],
+        "N": [
+            "normal qrs axis",
+            "absence of q waves in lateral leads",
+            "qrs duration >120ms",
+            "deep s waves in v5-v6",
+            "narrow r wave in leads i, avl, v5, v6"
+        ]
+    },
+    "IRBBB": {
+        "P": [
+            "rsr pattern in v1-v2",
+            "qrs duration 100-120ms",
+            "rsr' pattern in v1",
+            "qrs duration between 100-120 ms",
+            "wide s wave in leads i, v5, and v6"
+        ],
+        "N": [
+            "qr pattern v1",
+            "qrs duration > 120ms",
+            "qr pattern in v1",
+            "qrs duration < 100 ms or > 120 ms",
+            "normal left ventricular function"
+        ]
+    },
+    "PMI": {
+        "P": [
+            "prolonged qt interval",
+            "increased rwave amplitude in leads v1-v2",
+            "r/s ratio > 1 in v1-v2",
+            "upright t waves in v1-v2"
+        ],
+        "N": [
+            "normal qt interval",
+            "normal r wave progression in precordial leads v3-v6",
+            "st elevation in v5-v6",
+            "right axis deviation"
+        ]
+    },
+    "IVCD": {
+        "P": [
+            "slurred or notched qrs complex",
+            "wide qrs complex (>110 ms)",
+            "qrs duration > 110ms"
+        ],
+        "N": [
+            "sharp qrs complexes",
+            "normal p wave morphology",
+            "qrs morphology typical for rbbb"
+        ]
+    },
+    "HYP": {
+        "P": [
+            "t wave inversion secondary to hypertrophy",
+            "signs of strain pattern in lateral leads",
+            "r wave amplitude exceeds standard limits for hypertrophy"
+        ],
+        "N": [
+            "upright t waves in leads with no inversion",
+            "no strain pattern in lateral leads",
+            "r wave amplitude within standard limits"
+        ]
+    },
+    "CD": {
+        "P": [
+            "left axis deviation",
+            "rs pattern in inferior leads",
+            "notched r wave in lateral leads",
+            "poor r wave progression",
+            "rs pattern in lead ii"
+        ],
+        "N": [
+            "regular rhythm",
+            "normal p waves",
+            "narrow qrs complexes",
+            "normal st segments",
+            "normal heart rate"
+        ]
+    }
+}

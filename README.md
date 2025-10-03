@@ -23,7 +23,7 @@
 <div align="center">
 
 [![arXiv](https://img.shields.io/badge/arXiv-2409.02189-blue?logo=arxiv&logoColor=orange)](https://arxiv.org/html/2410.14464v1)
-[![ACM ICMI 2025](https://img.shields.io/badge/ACM%20ICMI%202024-Accepted-yellow.svg)](https://icmi.acm.org/2025/)
+[![NPJ](https://img.shields.io/badge/ACM%20ICMI%202024-Accepted-yellow.svg)](https://icmi.acm.org/2025/)
 </div>
 
 ## 📢 Updates

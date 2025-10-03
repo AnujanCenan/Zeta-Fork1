@@ -275,8 +275,8 @@ def inference(args):
                         language_feature_n = torch.tensor(language_feature[1]).cuda()
                         ecg_feature = F.normalize(ecg_feature, dim=0)
                         
-                        similarities_p = [(ecg_feature @ l.reshape(1, -1).T)[0] for l in language_feature_p]
-                        similarities_n = [(ecg_feature @ l.reshape(1, -1).T)[0] for l in language_feature_n]
+                        similarities_p = [(ecg_feature @ F.normalize(l, dim=0).reshape(1, -1).T)[0] for l in language_feature_p]
+                        similarities_n = [(ecg_feature @ F.normalize(l, dim=0).reshape(1, -1).T)[0] for l in language_feature_n]
                         
                         bicls = [similarities_p, similarities_n]
                         feature_p, _ = get_diseases_probs(bicls)
@@ -312,5 +312,6 @@ if __name__ == '__main__':
     argparser.add_argument('--test_csv_path', type=str, default='',
                           help="Test CSV file path, usually set by change_arg function")
     args = argparser.parse_args()
+
 
     inference(change_arg("icbeb", args))

@@ -28,15 +28,6 @@
 [![arXiv](https://img.shields.io/badge/arXiv-2409.02189-blue?logo=arxiv&logoColor=orange)](https://arxiv.org/html/2410.14464v1)
 </div>
 
-## 📢 Updates
-
-[10/2024] Arxiv has been released.
-
-[04/2025] Accepted to xxx
-
-[04/2025] [Code](link) & [Model](link) has been released.
-
-
 ## 📝 Abstract
 Electrocardiogram (ECG) interpretation is essential for cardiovascular disease diagnosis, but current automated systems often struggle with transparency and generalization to unseen conditions. To address this, we introduce ZETA, a zero-shot multimodal framework designed for interpretable ECG diagnosis aligned with clinical workflows. ZETA uniquely compares ECG signals against structured positive and negative clinical observations, which are curated through an LLM-assisted, expert-validated process, thereby mimicking differential diagnosis. Our approach leverages a pre-trained multimodal model to align ECG and text embeddings without disease-specific fine-tuning. Empirical evaluations demonstrate ZETA's competitive zero-shot classification performance and, importantly, provide qualitative and quantitative evidence of enhanced interpretability, grounding predictions in specific, clinically relevant positive and negative diagnostic features. ZETA underscores the potential of aligning ECG analysis with structured clinical knowledge for building more transparent, generalizable, and trustworthy AI diagnostic systems. We will release the curated observation dataset and code to facilitate future research.
 

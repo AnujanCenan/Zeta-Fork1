@@ -12,7 +12,7 @@
 </div>
 <div>
 <sup>1</sup><a href="https://www.tue.nl/en/our-university/departments/industrial-design/research/our-research-labs/decentralized-artificial-intelligence-research-lab" target="_blank" rel="noopener noreferrer">
-                        Decentralized Artificial Intelligence Research Lab, Eindhoven University of Technology, NL
+                        Industrial design, Eindhoven University of Technology, NL
                       </a>&emsp;
 
 <sup>2</sup>Singapore Management University, Singapore;

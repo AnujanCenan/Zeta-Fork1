@@ -5,6 +5,7 @@
     <a href='https://tang-jia-lu.github.io/' target='_blank'>Jialu Tang</a><sup>1</sup>&emsp;
     <a href='https://manhph2211.github.io/' target='_blank'>Pham Hung Manh</a><sup>2</sup>&emsp;
     <a href='https://www.researchgate.net/profile/Ignace-De-Lathauwer' target='_blank'>Ignace L.J. De Lathauwer</a><sup>2</sup>&emsp;
+    <a href='https://www.researchgate.net/profile/Ignace-De-Lathauwer' target='_blank'>Henk S. Schipper</a><sup>4</sup>&emsp;
     <a href=https://www.tue.nl/en/research/researchers/yuan-lu' target='_blank'>Yuan Lu</a><sup>1</sup>&emsp;
     <a href='https://www.dongma.info/' target='_blank'>Dong Ma</a><sup>2</sup>&emsp;   
     <a href='https://aqibsaeed.github.io/' target='_blank'>Aaqib Saeed</a><sup>1</sup>&emsp;
@@ -16,6 +17,8 @@
 
 <sup>2</sup>Singapore Management University, Singapore;
 <sup>3</sup>Department of Cardiology , Maxima Medical Center, Veldhoven;
+<sup>4</sup>Erasmus MC, Rotterdam;
+
 </div>
 </div>
 
@@ -23,7 +26,6 @@
 <div align="center">
 
 [![arXiv](https://img.shields.io/badge/arXiv-2409.02189-blue?logo=arxiv&logoColor=orange)](https://arxiv.org/html/2410.14464v1)
-[![NPJ](https://img.shields.io/badge/ACM%20ICMI%202024-Accepted-yellow.svg)](https://icmi.acm.org/2025/)
 </div>
 
 ## 📢 Updates

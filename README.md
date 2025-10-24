@@ -26,7 +26,7 @@
 Electrocardiogram (ECG) interpretation is essential for cardiovascular disease diagnosis, but current automated systems often struggle with transparency and generalization to unseen conditions. To address this, we introduce ZETA, a zero-shot multimodal framework designed for interpretable ECG diagnosis aligned with clinical workflows. ZETA uniquely compares ECG signals against structured positive and negative clinical observations, which are curated through an LLM-assisted, expert-validated process, thereby mimicking differential diagnosis. Our approach leverages a pre-trained multimodal model to align ECG and text embeddings without disease-specific fine-tuning. Empirical evaluations demonstrate ZETA's competitive zero-shot classification performance and, importantly, provide qualitative and quantitative evidence of enhanced interpretability, grounding predictions in specific, clinically relevant positive and negative diagnostic features. ZETA underscores the potential of aligning ECG analysis with structured clinical knowledge for building more transparent, generalizable, and trustworthy AI diagnostic systems. We will release the curated observation dataset and code to facilitate future research.
 
 <div align="left">
-<img src="img/ZETA.png" width="80%">
+<img src="ZETA.png" width="80%">
 <h3>📚 Three Features </h3>
 </div>
 
@@ -45,23 +45,9 @@ Datasets we used:
 
 - **CSN(Chapman-Shaoxing-Ningbo)**: We downloaded the [CSN](https://physionet.org/content/ecg-arrhythmia/1.0.0/) dataset.
 
-### Observations Dataset
-ZETA operates by comparing ECG representations against structured, validated natural language descriptions of diagnostic observations. Our approach frames the zero-shot problem as a comparison between ECG signals and predefined sets of positive and negative textual observations associated with specific conditions.
-The generated observations undergo review and validation by a doctor (specializing in cardiology). This human-in-the-loop step is critical for ensuring the clinical accuracy, relevance, and interpretability of the structured knowledge used by ZETA. The expert evaluates each candidate observation based on four key dimensions
-
-<example here! full in config:observation>
 ## 💡 Running scripts
-
-To prepare your experiment, please setup your configuration at the main.py. You can configure the specific federated learning strategy at server.py. You can simply execute the main script them to run the experiment, the results will save as a `logs` file.
-
 ```
 cd ./ZETA
 python main.py
 ```
 
-
-## Citing ZETA
-
-```bibtex
-
-```

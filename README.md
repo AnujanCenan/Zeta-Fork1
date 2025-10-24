@@ -12,20 +12,14 @@
 </div>
 <div>
 <sup>1</sup><a href="https://www.tue.nl/en/our-university/departments/industrial-design/research/our-research-labs/decentralized-artificial-intelligence-research-lab" target="_blank" rel="noopener noreferrer">
-                        Industrial design, Eindhoven University of Technology, NL
+                        Eindhoven University of Technology, Netherland
                       </a>&emsp;
 
 <sup>2</sup>Singapore Management University, Singapore;
-<sup>3</sup>Department of Cardiology , Maxima Medical Center, Veldhoven;
-<sup>4</sup>Erasmus MC, Rotterdam;
+<sup>3</sup>Maxima Medical Center, Netherland;
+<sup>4</sup>Erasmus Medical Center, Netherland;
 
 </div>
-</div>
-
-
-<div align="center">
-
-[![arXiv](https://img.shields.io/badge/arXiv-2409.02189-blue?logo=arxiv&logoColor=orange)](https://arxiv.org/html/2410.14464v1)
 </div>
 
 ## 📝 Abstract

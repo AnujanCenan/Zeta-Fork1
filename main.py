@@ -11,6 +11,14 @@ from types import SimpleNamespace
 import torch.nn.functional as F
 from data_load import ECGDataset
 
+import os
+from dotenv import load_dotenv
+
+# Ensure you have a .env file that is able 
+
+CHECKPOINT_PATH = os.getenv("CHECKPOINT_PATH")
+PATH_TO_CHAPMAN = os.getenv("PATH_TO_CHAPMAN")
+
 # Define category labels for different datasets
 categories = {
     "icbeb": ["AFIB", "VPC", "NORM", "1AVB", "CRBBB", "STE", "PAC", "CLBBB", "STD"],
@@ -35,7 +43,7 @@ DATASET_CONFIG = {
     },
     "chapman": {
         "dataset_name": "chapman",
-        "dataset_path": "path/to/chapman",
+        "dataset_path": PATH_TO_CHAPMAN,
         "test_csv_path": "data_split/chapman/chapman_test.csv"
     },
     "super_class": {
@@ -72,7 +80,7 @@ def load_encoders():
             cfg = json.load(json_file)
         cfg = SimpleNamespace(**cfg['model'])
         model = M3AEModel(cfg)
-        checkpoint = torch.load("checkpoints/best.pt")
+        checkpoint = torch.load(CHECKPOINT_PATH)
         if "ecg_encoder.mask_emb" in checkpoint["model"].keys():
             del checkpoint["model"]["ecg_encoder.mask_emb"]
         model.load_state_dict(checkpoint["model"], strict=True)
@@ -314,5 +322,5 @@ if __name__ == '__main__':
     args = argparser.parse_args()
 
 
-    inference(change_arg("icbeb", args))
+    inference(change_arg("chapman", args))
 

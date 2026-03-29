@@ -15,7 +15,7 @@ import os
 from dotenv import load_dotenv
 
 # Ensure you have a .env file that is able 
-
+load_dotenv()
 CHECKPOINT_PATH = os.getenv("CHECKPOINT_PATH")
 PATH_TO_CHAPMAN = os.getenv("PATH_TO_CHAPMAN")
 

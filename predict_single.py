@@ -58,7 +58,8 @@ def single_inference(ecg_id: int):
     ecg_dataset = ECGDataset(args)
     all_labels = set(categories["sub_class"]) \
         .intersection(set(["CLBBB","CRBBB", "NORM", "AVB"]))
-    
+    all_labels = list(all_labels)
+
     json_path = "./configs/observations.json"
 
     with open(json_path, 'r') as file:
@@ -79,7 +80,29 @@ def single_inference(ecg_id: int):
     
     train_loader = torch.utils.data.DataLoader(ecg_dataset, batch_size=800, shuffle=False, num_workers=4)
 
+    print("Extracting ECG features...")
+    ecg_features, diagnoses_test = [], []
+    for step, (ecg, target) in tqdm(enumerate(train_loader), desc="Processing data batches"):
+        ecg = ecg.permute(0, 2, 1)
+        ecg_feature = extract_ecg_features(ecg_model, ecg.to('cuda'), unimodal_ecg_pooler, multi_modal_ecg_proj, class_embedding, batch_size=100, datasets=args.dataset_name)
+        ecg_features.append(torch.tensor(ecg_feature))
+        diagnoses_test.append(torch.tensor(target))
+        
+    ecg_features = torch.cat(ecg_features, dim=0)
+    diagnoses_test = torch.cat(diagnoses_test, dim=0)
+        
+    diagnoses_test_np = diagnoses_test.numpy()
+    results = []
 
+    for i, label in enumerate(all_labels):
+        pos_count = int(diagnoses_test_np[:, i].sum())
+        neg_count = diagnoses_test_np.shape[0] - pos_count
+        results.append({
+            "label": label,
+            "positive_samples": pos_count,
+            "negative_samples": neg_count
+        })
+    
 
 
 

@@ -4,27 +4,6 @@ zeta_localize.py
 Extends ZETA inference for a single ECG to produce:
   - Per-observation similarity scores (from the unimodal dot-product path)
   - Temporal localization intervals (from the cross-attention fusion path)
-
-Output example:
-  Condition: 1AVB  (final score: 0.73)
-  Observation                              Score  Localization          Strength
-  [P] pr interval >200ms                  0.82   120ms – 340ms  II     ████████  highlight strongly
-  [P] normal p-wave morphology            0.71    80ms – 120ms  II     ██████    highlight moderately
-  [N] pr interval <200ms                  0.18   diffuse               ░░        suppress
-
-Usage:
-  python zeta_localize.py \
-      --ptbxl_path /path/to/ptbxl/records500/00000/00001_hr \
-      --condition 1AVB \
-      --checkpoint checkpoints/best.pt \
-      --config configs/config.json \
-      --observations configs/observations.json
-
-  --ptbxl_path should be the value from the 'filename_hr' column of the
-  PTB-XL CSV (without extension), relative to --ptbxl_root.
-
-  Alternatively, pass --ptbxl_root and --ptbxl_record_id to look up a
-  specific record by its ecg_id from ptbxl_database.csv.
 """
 
 import argparse
@@ -47,16 +26,17 @@ from dotenv import load_dotenv
 import os
 
 # ── constants ────────────────────────────────────────────────────────────────
-SAMPLE_RATE      = 500          # Hz
-ECG_LENGTH       = 5000         # samples (10 s)
-CONV_LAYERS      = [(256,2,2)] * 4  # must match config conv_feature_layers
+SAMPLE_RATE       = 500          # Hz
+ECG_LENGTH        = 5000         # samples (10 s)
+CONV_LAYERS       = [(256,2,2)] * 4  # must match config conv_feature_layers
 NUM_ECG_TOKENS   = 312          # computed from CONV_LAYERS above
 SAMPLES_PER_TOKEN = ECG_LENGTH / NUM_ECG_TOKENS   # ≈ 16.03 samples = ~32 ms
 MS_PER_TOKEN     = (SAMPLES_PER_TOKEN / SAMPLE_RATE) * 1000  # ≈ 32.05 ms
 
 LEAD_NAMES = ["I","II","III","aVR","aVL","aVF","V1","V2","V3","V4","V5","V6"]
 
-SOFTMAX_TEMP = 0.5   # matches ZETA paper / get_diseases_probs()
+# FIX: Lower temperature to match standard contrastive logit scaling (e.g., 1 / 0.07 ≈ 14.3 multiplier)
+SOFTMAX_TEMP = 0.07   
 
 # attention heatmap thresholds
 DIFFUSE_ENTROPY_THRESHOLD = 0.85   # fraction of max entropy -> call it "diffuse"
@@ -87,19 +67,6 @@ def load_model(config_path: str, checkpoint_path: str, device: torch.device) -> 
 # ─────────────────────────────────────────────────────────────────────────────
 
 def encode_ecg(model: M3AEModel, ecg: np.ndarray, device: torch.device):
-    """
-    Returns
-    -------
-    ecg_vec   : (768,) normalised pooled vector  — used for similarity scoring
-    ecg_seq   : (1, Lx+1, 768) full token sequence with CLS prepended
-                — used for cross-attention localisation
-    ecg_mask  : attention mask for ecg_seq, shape (1, Lx+1)
-
-    Pooling strategy: mean over all sequence tokens (excluding CLS) after
-    multi_modal_ecg_proj. Diagnostics show this gives the best separation
-    between conditions. The trained unimodal_ecg_pooler saturates due to
-    large proj magnitudes driving Tanh to ±1.
-    """
     x = torch.tensor(ecg, dtype=torch.float32).unsqueeze(0).to(device)  # (1,5000,12)
     x = x.permute(0, 2, 1)                                               # (1,12,5000)
 
@@ -133,17 +100,11 @@ def encode_ecg(model: M3AEModel, ecg: np.ndarray, device: torch.device):
 def encode_text(model: M3AEModel,
                 tokenizer: T5TokenizerFast,
                 text: str,
-                device: torch.device):
+                device: torch.device) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Encodes the diagnostic observation text into both a normalized global embedding 
     vector and a token-level sequence representation aligned with the shared 
     multimodal space.
-
-    This function extracts embeddings from the textual modality. Crucially, the 
-    global text vector (`text_vec`) is pooled *after* passing through the multimodal 
-    projection layer (`multi_modal_language_proj`). This maps the language features into 
-    the same 768-dimensional shared metric space as the ECG vectors, allowing for 
-    direct dot-product similarity calculation during zero-shot evaluation.
     """
     enc = tokenizer(text, truncation=True, return_tensors="pt").to(device)
 
@@ -151,6 +112,7 @@ def encode_text(model: M3AEModel,
         raw  = model.language_encoder(input_ids=enc["input_ids"])[0]  # (1, Lt, 768)
         proj = model.multi_modal_language_proj(raw)                    # (1, Lt, 768)
 
+        # FIX: Mean pool over the projected tokens (shared space), NOT raw
         text_vec = proj.mean(dim=1).squeeze(0)                         # (768,)
         text_vec = F.normalize(text_vec, dim=0)
 
@@ -166,15 +128,13 @@ def pairwise_score(ecg_vec: torch.Tensor,
                    neg_vecs: list[torch.Tensor]) -> tuple[list[float], list[float]]:
     """
     For each (pos_i, neg_i) pair compute softmax probability that pos wins.
-    Mirrors get_diseases_probs() in main.py exactly.
-
-    Returns per-observation positive scores and negative scores.
     """
     pos_scores, neg_scores = [], []
     for p_vec, n_vec in zip(pos_vecs, neg_vecs):
         sim_p = (ecg_vec @ p_vec).item()
         sim_n = (ecg_vec @ n_vec).item()
-        # softmax with temperature 0.5
+        
+        # Softmax computed using the scaled temperature constant
         exp_p = math.exp(sim_p / SOFTMAX_TEMP)
         exp_n = math.exp(sim_n / SOFTMAX_TEMP)
         total = exp_p + exp_n
@@ -193,17 +153,6 @@ def get_cross_attention_heatmap(model: M3AEModel,
                                 ecg_seq: torch.Tensor,
                                 ecg_mask: torch.Tensor,
                                 device: torch.device) -> torch.Tensor:
-    """
-    Run one forward pass through multi_modal_language_layers
-    (text-as-query, ECG-as-key/value) and collect cross-attention
-    weights from each of the 6 layers.
-
-    Returns heatmap of shape (Lx,) — one importance value per ECG token
-    (excludes the CLS token at index 0).
-
-    BertCrossLayer output tuple: (layer_output, self_attn, cross_attn)
-    cross_attn shape: (batch, num_heads, Lt, Lx+1)
-    """
     # add modality-type embeddings — must match the forward() in cmelt.py
     text_ids_dummy = torch.zeros(
         (1, text_seq.size(1)), dtype=torch.long, device=device
@@ -224,7 +173,7 @@ def get_cross_attention_heatmap(model: M3AEModel,
             ecg_mask, ecg_mask.size()
         )
 
-        all_cross_attn = []   # one tensor per layer
+        all_cross_attn = []  # one tensor per layer
 
         for text_layer in model.multi_modal_language_layers:
             outputs = text_layer(
@@ -233,7 +182,6 @@ def get_cross_attention_heatmap(model: M3AEModel,
                 encoder_attention_mask=ext_ecg_mask,
                 output_attentions=True,
             )
-            # outputs = (layer_out, self_attn_weights, cross_attn_weights)
             cross_attn = outputs[2]   # (1, 12_heads, Lt, Lx+1)
             all_cross_attn.append(cross_attn)
             x = outputs[0]   # feed updated text sequence to next layer
@@ -251,17 +199,6 @@ def get_cross_attention_heatmap(model: M3AEModel,
 
 
 def heatmap_to_interval(heatmap: torch.Tensor, lead_axis: int = 1):
-    """
-    Convert a 1-D importance heatmap over ECG tokens into:
-      - (start_ms, end_ms)  bounding interval
-      - dominant_lead index
-      - is_diffuse flag
-
-    The heatmap here is aggregated over leads, so lead selection
-    is a separate step (we pick the lead whose raw signal has
-    highest variance in the predicted window — a proxy for
-    diagnostic salience without requiring per-lead attention).
-    """
     n_tokens = len(heatmap)
 
     # normalise to [0,1]
@@ -293,10 +230,6 @@ def heatmap_to_interval(heatmap: torch.Tensor, lead_axis: int = 1):
 def pick_dominant_lead(ecg: np.ndarray,
                        start_ms: int,
                        end_ms: int) -> int:
-    """
-    Within the predicted interval, return the lead index with
-    highest signal variance — a proxy for diagnostic salience.
-    """
     start_sample = int(start_ms / 1000 * SAMPLE_RATE)
     end_sample   = int(end_ms   / 1000 * SAMPLE_RATE)
     segment = ecg[start_sample:end_sample, :]   # (samples, 12)
@@ -309,13 +242,6 @@ def pick_dominant_lead(ecg: np.ndarray,
 # ─────────────────────────────────────────────────────────────────────────────
 
 def strength_label(score: float, is_positive: bool) -> tuple[str, str]:
-    """
-    For positive observations: high score = strong evidence for condition.
-    For negative observations: low score  = strong evidence for condition
-                               (the negative feature is absent).
-    Returns (bar, label).
-    """
-    # for negative obs, invert: a low pos-score means the neg obs is absent
     effective = score if is_positive else (1.0 - score)
 
     if effective >= 0.75:
@@ -384,14 +310,12 @@ def run(ecg: np.ndarray,
     # ── print results ─────────────────────────────────────────────────────────
     print()
 
-    # ground truth block
     if ground_truth is not None:
         fold = ground_truth["strat_fold"]
         fold_note = " (official test set)" if fold == 10 else f" (fold {fold})"
         print(f"Report:     {ground_truth['report']}{fold_note}")
         print()
 
-        # check whether the queried condition appears in confirmed or uncertain
         all_codes = (
             [e[0] for e in ground_truth["confirmed"]] +
             [e[0] for e in ground_truth["uncertain"]]
@@ -464,124 +388,55 @@ def run(ecg: np.ndarray,
     print()
 
     for i, (text, score, loc) in enumerate(zip(neg_texts, neg_scores, neg_locs)):
-        # neg_scores[i] is the softmax prob of the negative observation winning —
-        # a LOW neg score means the neg feature is absent -> supports the condition
         format_row("N", text, score, loc, is_positive=False)
 
     print()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Entry point
+# Entry point utils
 # ─────────────────────────────────────────────────────────────────────────────
 
 def load_ptbxl_record(ptbxl_root: str, filename_hr: str) -> np.ndarray:
-    """
-    Load a single PTB-XL record from its .dat/.hea WFDB file pair.
-
-    Parameters
-    ----------
-    ptbxl_root  : root directory of PTB-XL
-                  (the folder containing records500/, ptbxl_database.csv, etc.)
-    filename_hr : value from the 'filename_hr' column of ptbxl_database.csv,
-                  e.g. 'records500/00000/00001_hr'  (no extension)
-
-    Returns
-    -------
-    ecg : np.ndarray, shape (5000, 12), float32, normalised to [0, 1]
-          Lead order: I, II, III, aVR, aVL, aVF, V1–V6
-          (aVL/aVF swapped to match MIMIC/D-BETA training convention)
-    """
     path = str(Path(ptbxl_root) / filename_hr)
-
-    # wfdb.rdsamp returns (signal, fields)
-    # signal shape: (T, 12) — already time-first, no transpose needed
     signal, fields = wfdb.rdsamp(path)
-
     ecg = signal.astype(np.float32)      # (T, 12)
-    ecg = ecg[:5000, :]                  # guard: ensure exactly 5000 samples
-    ecg = ecg.T                          # -> (12, 5000) for normalisation
-
-    # normalise to [0, 1] per recording — matches data_load.py
+    ecg = ecg[:5000, :]                  # guard
+    ecg = ecg.T                          # -> (12, 5000)
     ecg = (ecg - ecg.min()) / (ecg.max() - ecg.min() + 1e-8)
-
-    # swap aVL (index 4) and aVF (index 5) to match MIMIC lead order
-    # PTB-XL order: I II III aVR aVL aVF V1-V6
-    # MIMIC order:  I II III aVR aVF aVL V1-V6
-    ecg[[4, 5]] = ecg[[5, 4]]
-
-    return ecg.T   # -> (5000, 12) time-first
+    ecg[[4, 5]] = ecg[[5, 4]]            # Swap aVL and aVF for training alignment
+    return ecg.T
 
 
-def load_ptbxl_db(ptbxl_root: str) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """
-    Load ptbxl_database.csv and scp_statements.csv from the PTB-XL root.
-    Both are returned indexed by their natural key.
-    """
+def load_ptbxl_db(ptbxl_root: str):
     db_path  = Path(ptbxl_root) / "ptbxl_database.csv"
     scp_path = Path(ptbxl_root) / "scp_statements.csv"
-    if not db_path.exists():
-        raise FileNotFoundError(f"ptbxl_database.csv not found at {db_path}")
-    if not scp_path.exists():
-        raise FileNotFoundError(f"scp_statements.csv not found at {scp_path}")
     db  = pd.read_csv(db_path,  index_col="ecg_id")
     scp = pd.read_csv(scp_path, index_col=0)
     return db, scp
 
 
 def find_filename_hr(ptbxl_root: str, ecg_id: int) -> str:
-    """
-    Look up filename_hr for a given ecg_id from ptbxl_database.csv.
-    """
     db, _ = load_ptbxl_db(ptbxl_root)
-    if ecg_id not in db.index:
-        raise ValueError(f"ecg_id {ecg_id} not found in ptbxl_database.csv")
     return db.loc[ecg_id, "filename_hr"]
 
 
-# Likelihood threshold above which a diagnostic SCP code is considered positive.
-# PTB-XL convention: annotators assign 100 = "definitely present",
-# lower values = uncertain. We show both tiers separately.
-CONFIRMED_THRESHOLD  = 100.0
-UNCERTAIN_THRESHOLD  =   0.0   # > 0 means mentioned, even if not confirmed
-
-
 def get_ground_truth(ptbxl_root: str, ecg_id: int) -> dict:
-    """
-    Read ground truth labels for a given ecg_id directly from
-    ptbxl_database.csv and scp_statements.csv.
-
-    Returns a dict with keys:
-      'confirmed'  : list of (code, description, categories) where likelihood == 100
-      'uncertain'  : list of (code, description, categories) where 0 < likelihood < 100
-      'report'     : raw free-text report string from the database
-      'strat_fold' : integer fold (10 = official test set)
-
-    'categories' is itself a dict, e.g.:
-      {'diagnostic_class': 'CD', 'diagnostic_subclass': '1AVB',
-       'rhythm': False, 'form': False}
-    """
     db, scp = load_ptbxl_db(ptbxl_root)
-    if ecg_id not in db.index:
-        raise ValueError(f"ecg_id {ecg_id} not found in ptbxl_database.csv")
-
     row = db.loc[ecg_id]
-    raw_codes = ast.literal_eval(row["scp_codes"])   # {'NORM': 100.0, 'SR': 0.0, ...}
+    raw_codes = ast.literal_eval(row["scp_codes"])
 
     confirmed, uncertain = [], []
     for code, likelihood in raw_codes.items():
-        if likelihood <= UNCERTAIN_THRESHOLD:
-            continue   # zero-likelihood codes are annotation artefacts, skip
+        if likelihood <= 0.0:
+            continue
 
-        # look up description and category from scp_statements
         if code in scp.index:
             s = scp.loc[code]
             description = str(s["description"])
             categories  = {
-                "diagnostic_class":    s["diagnostic_class"]
-                                       if pd.notna(s["diagnostic_class"]) else None,
-                "diagnostic_subclass": s["diagnostic_subclass"]
-                                       if pd.notna(s["diagnostic_subclass"]) else None,
+                "diagnostic_class":    s["diagnostic_class"] if pd.notna(s["diagnostic_class"]) else None,
+                "diagnostic_subclass": s["diagnostic_subclass"] if pd.notna(s["diagnostic_subclass"]) else None,
                 "rhythm": pd.notna(s["rhythm"]),
                 "form":   pd.notna(s["form"]),
             }
@@ -590,7 +445,7 @@ def get_ground_truth(ptbxl_root: str, ecg_id: int) -> dict:
             categories  = {}
 
         entry = (code, likelihood, description, categories)
-        if likelihood >= CONFIRMED_THRESHOLD:
+        if likelihood >= 100.0:
             confirmed.append(entry)
         else:
             uncertain.append(entry)
@@ -603,58 +458,23 @@ def get_ground_truth(ptbxl_root: str, ecg_id: int) -> dict:
     }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Entry point
-# ─────────────────────────────────────────────────────────────────────────────
-
 def main():
-
     load_dotenv()
     PTBXL_DATASET = os.getenv("PTBXL_DATASET")
     CHECKPOINT_PATH = os.getenv("CHECKPOINT_PATH")
 
     parser = argparse.ArgumentParser(description="ZETA localisation for a single PTB-XL ECG")
-
-    # --- ECG source (one of two options) ---
     ecg_group = parser.add_mutually_exclusive_group(required=True)
-    ecg_group.add_argument(
-        "--filename_hr",
-        help=(
-            "Value of 'filename_hr' from ptbxl_database.csv, "
-            "e.g. 'records500/00000/00001_hr'. "
-            "Used together with --ptbxl_root."
-        )
-    )
-    ecg_group.add_argument(
-        "--ecg_id",
-        type=int,
-        help=(
-            "Integer ecg_id from ptbxl_database.csv. "
-            "Used together with --ptbxl_root to look up filename_hr automatically."
-        )
-    )
+    ecg_group.add_argument("--filename_hr")
+    ecg_group.add_argument("--ecg_id", type=int)
 
-    parser.add_argument(
-        "--ptbxl_root",
-        default=PTBXL_DATASET,
-        help="Root directory of the PTB-XL dataset (contains ptbxl_database.csv and records500/)."
-    )
-
-    parser.add_argument(
-        "--ground_truth",
-        action="store_true",
-        help=(
-            "Look up ground truth labels for this record directly from "
-            "ptbxl_database.csv and scp_statements.csv. "
-            "Requires --ecg_id and --ptbxl_root."
-        )
-    )
-    parser.add_argument("--condition",    required=True,
-                        help="Condition code from observations.json, e.g. 1AVB, AFIB, WPW")
-    parser.add_argument("--checkpoint",   default=CHECKPOINT_PATH)
-    parser.add_argument("--config",       default="configs/config.json")
+    parser.add_argument("--ptbxl_root", default=PTBXL_DATASET)
+    parser.add_argument("--ground_truth", action="store_true")
+    parser.add_argument("--condition", required=True)
+    parser.add_argument("--checkpoint", default=CHECKPOINT_PATH)
+    parser.add_argument("--config", default="configs/config.json")
     parser.add_argument("--observations", default="configs/observations.json")
-    parser.add_argument("--device",       default="cuda" if torch.cuda.is_available() else "cpu")
+    parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
 
     args = parser.parse_args()
     device = torch.device(args.device)
@@ -663,36 +483,21 @@ def main():
         print("ensure PTBXL_DATASET and CHECKPOINT_PATH are set in .env")
         exit(1)
 
-    # --- resolve PTB-XL record ---
     if args.ecg_id is not None:
-        print(f"Looking up ecg_id {args.ecg_id} in ptbxl_database.csv ...")
         filename_hr = find_filename_hr(args.ptbxl_root, args.ecg_id)
-        print(f"  -> filename_hr: {filename_hr}")
     else:
         filename_hr = args.filename_hr
 
-    print(f"Loading ECG: {filename_hr} ...")
     ecg = load_ptbxl_record(args.ptbxl_root, filename_hr)
-    print(f"  -> shape {ecg.shape}, min {ecg.min():.3f}, max {ecg.max():.3f}")
-
-    # --- load model ---
-    print(f"Loading model from {args.checkpoint} ...")
     model = load_model(args.config, args.checkpoint, device)
-
-    tokenizer = T5TokenizerFast.from_pretrained(
-        "google/flan-t5-base", do_lower_case=True
-    )
+    tokenizer = T5TokenizerFast.from_pretrained("google/flan-t5-base", do_lower_case=True)
 
     with open(args.observations) as f:
         observations = json.load(f)
 
-    # --- optional ground truth lookup ---
     ground_truth = None
-    if args.ground_truth:
-        if args.ecg_id is None:
-            print("Warning: --ground_truth requires --ecg_id; skipping GT lookup.")
-        else:
-            ground_truth = get_ground_truth(args.ptbxl_root, args.ecg_id)
+    if args.ground_truth and args.ecg_id is not None:
+        ground_truth = get_ground_truth(args.ptbxl_root, args.ecg_id)
 
     run(ecg, args.condition, model, tokenizer, observations, device, ground_truth)
 

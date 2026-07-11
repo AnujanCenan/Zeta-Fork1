@@ -45,7 +45,6 @@ from models.cmelt import M3AEModel
 
 from dotenv import load_dotenv
 import os
-import sys
 
 # ── constants ────────────────────────────────────────────────────────────────
 SAMPLE_RATE      = 500          # Hz
@@ -63,7 +62,6 @@ SOFTMAX_TEMP = 0.5   # matches ZETA paper / get_diseases_probs()
 DIFFUSE_ENTROPY_THRESHOLD = 0.85   # fraction of max entropy → call it "diffuse"
 MIN_INTERVAL_TOKENS       = 3      # smallest meaningful interval (~96 ms)
 PEAK_PERCENTILE           = 75     # tokens above this percentile form the interval
-
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -96,16 +94,19 @@ def encode_ecg(model: M3AEModel, ecg: np.ndarray, device: torch.device):
     ecg_seq   : (1, Lx+1, 768) full token sequence with CLS prepended
                 — used for cross-attention localisation
     ecg_mask  : attention mask for ecg_seq, shape (1, Lx+1)
+
+    Input ecg is (5000, 12) time-first.
+    main.py does ecg.permute(0,2,1) on a (B,5000,12) batch → (B,12,5000).
+    We replicate that: unsqueeze batch dim → (1,5000,12), permute → (1,12,5000).
     """
-    # ecg expected (5000, 12) → model wants (B, C, T) = (1, 12, 5000)
-    x = torch.tensor(ecg, dtype=torch.float32).T.unsqueeze(0).to(device)
+    x = torch.tensor(ecg, dtype=torch.float32).unsqueeze(0).to(device)  # (1,5000,12)
+    x = x.permute(0, 2, 1)                                               # (1,12,5000)
 
     with torch.no_grad():
-        # conv feature extraction + positional encoding
         feats, padding_mask = model.ecg_encoder.get_embeddings(x, padding_mask=None)
 
-        # prepend CLS token  — shape becomes (1, Lx+1, 768)
-        cls_emb = model.class_embedding.unsqueeze(0).unsqueeze(0)  # (1,1,768)
+        # prepend CLS token — shape becomes (1, Lx+1, 768)
+        cls_emb = model.class_embedding.repeat((1, 1, 1))   # (1,1,768)
         feats_with_cls = torch.cat([cls_emb, feats], dim=1)
 
         # transformer self-attention layers
@@ -115,10 +116,10 @@ def encode_ecg(model: M3AEModel, ecg: np.ndarray, device: torch.device):
         feats_proj = model.multi_modal_ecg_proj(feats_with_cls)
 
         # CLS pooling → single vector for similarity
-        ecg_vec = model.unimodal_ecg_pooler(feats_proj)          # (1, 768)
-        ecg_vec = F.normalize(ecg_vec.squeeze(0), dim=0)          # (768,)
+        ecg_vec = model.unimodal_ecg_pooler(feats_proj)     # (1, 768)
+        ecg_vec = F.normalize(ecg_vec.squeeze(0), dim=0)    # (768,)
 
-    # build attention mask (all ones — no padding for a fixed-length ECG)
+    # build attention mask (all ones — no padding for fixed-length ECG)
     Lx_plus1 = feats_proj.size(1)
     ecg_mask = torch.ones((1, Lx_plus1), dtype=torch.long, device=device)
 
@@ -139,14 +140,20 @@ def encode_text(model: M3AEModel,
     text_vec  : (768,) normalised pooled vector
     text_seq  : (1, Lt, 768) full token sequence
     text_mask : attention mask (1, Lt)
+
+    main.py's extract_language_features uses torch.max(outputs, dim=1)
+    — max pooling over the sequence dimension — NOT the CLS pooler.
+    We replicate that exactly here.
     """
     enc = tokenizer(text, truncation=True, return_tensors="pt").to(device)
 
     with torch.no_grad():
         raw = model.language_encoder(input_ids=enc["input_ids"])[0]  # (1, Lt, 768)
         proj = model.multi_modal_language_proj(raw)                   # (1, Lt, 768)
-        text_vec = model.unimodal_language_pooler(proj)               # (1, 768)
-        text_vec = F.normalize(text_vec.squeeze(0), dim=0)            # (768,)
+
+        # max pool over sequence dimension — matches extract_language_features
+        text_vec, _ = torch.max(proj, dim=1)                         # (1, 768)
+        text_vec = F.normalize(text_vec.squeeze(0), dim=0)           # (768,)
 
     return text_vec, proj.detach(), enc["attention_mask"]
 
@@ -603,7 +610,9 @@ def get_ground_truth(ptbxl_root: str, ecg_id: int) -> dict:
 
 def main():
     load_dotenv()
-    PTBXL_DATASET_PATH = os.getenv("PTBXL_DATASET")
+
+    PTBXL_DATASET = os.getenv("PTBXL_DATASET")
+    CHECKPOINT_PATH = os.getenv("CHECKPOINT_PATH")
 
     parser = argparse.ArgumentParser(description="ZETA localisation for a single PTB-XL ECG")
 
@@ -628,7 +637,7 @@ def main():
 
     parser.add_argument(
         "--ptbxl_root",
-        default=PTBXL_DATASET_PATH,
+        default=PTBXL_DATASET,
         help="Root directory of the PTB-XL dataset (contains ptbxl_database.csv and records500/)."
     )
 
@@ -643,7 +652,7 @@ def main():
     )
     parser.add_argument("--condition",    required=True,
                         help="Condition code from observations.json, e.g. 1AVB, AFIB, WPW")
-    parser.add_argument("--checkpoint",   default="checkpoints/best.pt")
+    parser.add_argument("--checkpoint",   default=CHECKPOINT_PATH)
     parser.add_argument("--config",       default="configs/config.json")
     parser.add_argument("--observations", default="configs/observations.json")
     parser.add_argument("--device",       default="cuda" if torch.cuda.is_available() else "cpu")
@@ -651,12 +660,18 @@ def main():
     args = parser.parse_args()
     device = torch.device(args.device)
 
-    # guard: ptbxl_root must be resolved by now either from .env or --ptbxl_root
     if args.ptbxl_root is None:
         parser.error(
             "PTB-XL root not found. Either set PTBXL_DATASET in your .env file "
             "or pass --ptbxl_root explicitly."
         )
+    
+    if args.checkpoint is None:
+        parser.error(
+            "checkpoint not found. Either set CHECKPOINT_PATH in your .env file "
+            "or pass --checkpoint explicitly."
+        )
+        
 
 
     # --- resolve PTB-XL record ---

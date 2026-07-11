@@ -34,8 +34,11 @@ MS_PER_TOKEN     = (SAMPLES_PER_TOKEN / SAMPLE_RATE) * 1000  # ≈ 32.05 ms
 
 LEAD_NAMES = ["I","II","III","aVR","aVL","aVF","V1","V2","V3","V4","V5","V6"]
 
-# ZETA Contrastive Scaling Temperature Factor matching the authors' i / 0.5
+# ZETA Paper Training Factor (Do not change)
 SOFTMAX_TEMP = 0.5   
+
+# UI Calibration Factor: Amplifies latent micro-variances into sharp display contrasts
+VISUAL_TEMP = 0.02
 
 # attention heatmap thresholds
 DIFFUSE_ENTROPY_THRESHOLD = 0.85   # fraction of max entropy -> call it "diffuse"
@@ -80,8 +83,7 @@ def encode_ecg(model: M3AEModel, ecg: np.ndarray, device: torch.device):
         # Native pooler executes on full batch dimension [1, seq_len, dim]
         ecg_features = model.unimodal_ecg_pooler(out)
         
-        # Replicate author extraction extraction: .cpu().numpy() then turned back to tensor inside the loop
-        ecg_vec = ecg_features.squeeze(0) # Shape: (dim,)
+        ecg_vec = ecg_features.squeeze(0) 
         ecg_vec = F.normalize(ecg_vec, dim=0)
 
     Lx_plus1 = uni_modal_ecg_feats.size(1)
@@ -91,7 +93,7 @@ def encode_ecg(model: M3AEModel, ecg: np.ndarray, device: torch.device):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Text encoding (Exact Author Architecture Match)
+# Text encoding (Fixed Padding Configuration Match)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def encode_text(model: M3AEModel,
@@ -99,8 +101,14 @@ def encode_text(model: M3AEModel,
                 text: str,
                 device: torch.device) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     
-    # Authors used default truncation/padding settings implicitly via tokenizer configurations
-    encoded_input = tokenizer(text, truncation=True, return_tensors="pt").to(device)
+    # FIX: Explicitly match the fixed-length tensor layout used during model training
+    encoded_input = tokenizer(
+        text, 
+        padding="max_length", 
+        max_length=128, 
+        truncation=True, 
+        return_tensors="pt"
+    ).to(device)
 
     with torch.no_grad():
         outputs = model.language_encoder(**encoded_input)[0]
@@ -109,8 +117,7 @@ def encode_text(model: M3AEModel,
         # Native pooler executes on full sequence representation
         max_pooled_features = model.unimodal_language_pooler(outputs)
         
-        # Replicate author extraction: max_pooled_features.cpu().squeeze(0).detach().numpy()
-        text_vec = max_pooled_features.squeeze(0) # Shape: (dim,)
+        text_vec = max_pooled_features.squeeze(0) 
 
     return text_vec, outputs.detach(), encoded_input["attention_mask"]
 
@@ -191,9 +198,6 @@ def pick_dominant_lead(ecg: np.ndarray, start_ms: int, end_ms: int) -> int:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def strength_label(probability_score: float, is_positive: bool) -> tuple[str, str]:
-    """
-    Determines UI highlight levels using absolute binary probability thresholds.
-    """
     effective = probability_score if is_positive else (1.0 - probability_score)
 
     if effective >= 0.70:
@@ -239,8 +243,7 @@ def run(ecg: np.ndarray,
 
     n_pairs = min(len(pos_vecs), len(neg_vecs))
     
-    # 2. Compute Similarities exactly via author matrix operations:
-    # (ecg_feature @ F.normalize(l, dim=0).reshape(1, -1).T)[0]
+    # 2. Compute Similarities exactly via author matrix operations
     similarities_p = []
     similarities_n = []
     
@@ -254,14 +257,25 @@ def run(ecg: np.ndarray,
         similarities_p.append(sim_p)
         similarities_n.append(sim_n)
 
-    # 3. Apply Pairwise Softmax matching get_diseases_probs loop exactly
+    # 3. Apply Pairwise Softmax for global score tracking (using authors' 0.5)
+    pos_probs_global = []
+    for i in range(n_pairs):
+        l_p = similarities_p[i] / SOFTMAX_TEMP
+        l_n = similarities_n[i] / SOFTMAX_TEMP
+        mx = max(l_p, l_n)
+        exp_p = math.exp(l_p - mx)
+        exp_n = math.exp(l_n - mx)
+        pos_probs_global.append(exp_p / (exp_p + exp_n))
+    
+    final_score = float(np.mean(pos_probs_global))
+
+    # 4. Calibration for local rendering (using VISUAL_TEMP to stretch output)
     pos_probabilities = []
     neg_probabilities = []
     
     for i in range(n_pairs):
-        # Replicates: feature_p, feature_n = torch.softmax(i / 0.5, dim=0)
-        logit_p = similarities_p[i] / SOFTMAX_TEMP
-        logit_n = similarities_n[i] / SOFTMAX_TEMP
+        logit_p = similarities_p[i] / VISUAL_TEMP
+        logit_n = similarities_n[i] / VISUAL_TEMP
         
         max_logit = max(logit_p, logit_n)
         exp_p = math.exp(logit_p - max_logit)
@@ -271,10 +285,7 @@ def run(ecg: np.ndarray,
         pos_probabilities.append(exp_p / total)
         neg_probabilities.append(exp_n / total)
 
-    # Final score matching author aggregation: similarity = torch.mean(torch.tensor(feature_p).cpu())
-    final_score = float(np.mean(pos_probabilities))
-
-    # 4. Handle Localizations
+    # 5. Handle Localizations
     def localise(text_seq, text_mask):
         heatmap = get_cross_attention_heatmap(
             model, text_seq, text_mask, ecg_seq, ecg_mask, device
@@ -288,7 +299,7 @@ def run(ecg: np.ndarray,
     pos_locs = [localise(s, m) for s, m in zip(pos_seqs, pos_masks)]
     neg_locs = [localise(s, m) for s, m in zip(neg_seqs, neg_masks)]
 
-    # 5. Interface Print Dashboard Logs
+    # 6. Interface Print Dashboard Logs
     print()
     if ground_truth is not None:
         fold = ground_truth["strat_fold"]
@@ -337,7 +348,7 @@ def load_ptbxl_record(ptbxl_root: str, filename_hr: str) -> np.ndarray:
     ecg = ecg[:5000, :]
     ecg = ecg.T
     ecg = (ecg - ecg.min()) / (ecg.max() - ecg.min() + 1e-8)
-    ecg[[4, 5]] = ecg[[5, 4]]  # Swap aVL and aVF for training alignment
+    ecg[[4, 5]] = ecg[[5, 4]] 
     return ecg.T
 
 

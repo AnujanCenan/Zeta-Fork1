@@ -255,14 +255,22 @@ def pick_dominant_lead(ecg: np.ndarray,
 # Strength label
 # ─────────────────────────────────────────────────────────────────────────────
 
-def strength_label(score: float, is_positive: bool) -> tuple[str, str]:
-    effective = score if is_positive else (1.0 - score)
+def strength_label(score: float, is_positive: bool, companion_score: float) -> tuple[str, str]:
+    """
+    Evaluates evidence by checking the relative ratio between the positive 
+    observation and its matching negative counterpart.
+    """
+    # Calculate relative probability between this specific pair
+    total = score + companion_score + 1e-8
+    relative_score = score / total
+    
+    effective = relative_score if is_positive else (1.0 - relative_score)
 
-    if effective >= 0.75:
+    if effective >= 0.65:
         return "████████", "highlight strongly"
-    elif effective >= 0.60:
+    elif effective >= 0.55:
         return "██████  ", "highlight moderately"
-    elif effective >= 0.45:
+    elif effective >= 0.48:
         return "████    ", "highlight weakly"
     else:
         return "░░      ", "suppress"

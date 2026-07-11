@@ -160,17 +160,28 @@ def get_cross_attention_heatmap(model: M3AEModel,
 
     return heatmap.cpu()
 
-
 def heatmap_to_interval(heatmap: torch.Tensor):
     n_tokens = len(heatmap)
     h = heatmap.float()
+    
+    # 1. Min-max scale to [0, 1] range
     h = (h - h.min()) / (h.max() - h.min() + 1e-8)
 
-    probs = h / (h.sum() + 1e-8)
+    # 2. NOISE FILTER: Zero out anything below the median attention level
+    # This prevents tiny residual distributions from dominating the entropy calculation
+    h_filtered = torch.where(h > torch.median(h), h, torch.zeros_like(h))
+
+    # 3. Compute entropy on the cleaned distribution
+    probs = h_filtered / (h_filtered.sum() + 1e-8)
     entropy = -(probs * (probs + 1e-8).log()).sum().item()
+    
+    # Max entropy of a completely uniform signal
     max_entropy = math.log(n_tokens)
+    
+    # Check if the signal is genuinely uniform across the timeline
     diffuse = (entropy / max_entropy) > DIFFUSE_ENTROPY_THRESHOLD
 
+    # 4. Extract active interval peaks using standard percentile bounds
     threshold = torch.quantile(h, PEAK_PERCENTILE / 100.0).item()
     active = (h >= threshold).nonzero(as_tuple=True)[0]
 
@@ -184,7 +195,6 @@ def heatmap_to_interval(heatmap: torch.Tensor):
     end_ms   = int((end_token + 1) * MS_PER_TOKEN)
 
     return start_ms, end_ms, False
-
 
 def pick_dominant_lead(ecg: np.ndarray, start_ms: int, end_ms: int) -> int:
     start_sample = int(start_ms / 1000 * SAMPLE_RATE)

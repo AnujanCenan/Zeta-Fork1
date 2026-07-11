@@ -168,28 +168,40 @@ def heatmap_to_interval(heatmap: torch.Tensor):
     h = (h - h.min()) / (h.max() - h.min() + 1e-8)
 
     # 2. NOISE FILTER: Zero out anything below the median attention level
-    # This prevents tiny residual distributions from dominating the entropy calculation
     h_filtered = torch.where(h > torch.median(h), h, torch.zeros_like(h))
 
     # 3. Compute entropy on the cleaned distribution
     probs = h_filtered / (h_filtered.sum() + 1e-8)
     entropy = -(probs * (probs + 1e-8).log()).sum().item()
-    
-    # Max entropy of a completely uniform signal
     max_entropy = math.log(n_tokens)
-    
-    # Check if the signal is genuinely uniform across the timeline
     diffuse = (entropy / max_entropy) > DIFFUSE_ENTROPY_THRESHOLD
 
-    # 4. Extract active interval peaks using standard percentile bounds
-    threshold = torch.quantile(h, PEAK_PERCENTILE / 100.0).item()
-    active = (h >= threshold).nonzero(as_tuple=True)[0]
+    # 4. FIX WIDE INTERVALS: Aggressively target the highest concentration of attention
+    # Bump up the threshold focus to the top 90th percentile for single-activation tracking
+    strict_threshold = torch.quantile(h_filtered, 0.90).item()
+    active = (h_filtered >= strict_threshold).nonzero(as_tuple=True)[0]
 
-    if len(active) < MIN_INTERVAL_TOKENS or diffuse:
+    if len(active) < 1 or diffuse:
         return None, None, True
 
-    start_token = active[0].item()
-    end_token   = active[-1].item()
+    # Find the single highest peak token in the signal
+    max_token_idx = torch.argmax(h_filtered).item()
+
+    # Expand outward from the peak token to capture the local contiguous neighborhood 
+    # that stays above the 75th percentile, preventing distant blips from pulling the boundaries
+    neighborhood_threshold = torch.quantile(h_filtered, PEAK_PERCENTILE / 100.0).item()
+    
+    start_token = max_token_idx
+    while start_token > 0 and h_filtered[start_token - 1] >= neighborhood_threshold:
+        start_token -= 1
+        
+    end_token = max_token_idx
+    while end_token < n_tokens - 1 and h_filtered[end_token + 1] >= neighborhood_threshold:
+        end_token += 1
+
+    # Verify our localized window meets minimum interval duration constraints
+    if (end_token - start_token + 1) < MIN_INTERVAL_TOKENS:
+        return None, None, True
 
     start_ms = int(start_token * MS_PER_TOKEN)
     end_ms   = int((end_token + 1) * MS_PER_TOKEN)

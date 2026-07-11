@@ -389,13 +389,15 @@ def run(ecg: np.ndarray,
     print(header)
     print("  " + "─" * (col_obs + col_scr + col_loc + col_bar + 20))
 
-    def format_row(tag, text, score, loc, is_positive):
+    def format_row(tag, text, score, loc, is_positive, companion_score):
         start_ms, end_ms, lead_idx = loc
         if start_ms is not None:
             loc_str = f"{start_ms}ms – {end_ms}ms  {LEAD_NAMES[lead_idx]}"
         else:
             loc_str = "diffuse"
-        bar, label = strength_label(score, is_positive)
+        
+        # Pass companion score to calculate localized pair strength
+        bar, label = strength_label(score, is_positive, companion_score)
         obs_str = f"[{tag}] {text}"
         print(
             f"  {obs_str:<{col_obs}}"
@@ -405,13 +407,11 @@ def run(ecg: np.ndarray,
         )
 
     for i, (text, score, loc) in enumerate(zip(pos_texts, pos_scores, pos_locs)):
-        format_row("P", text, score, loc, is_positive=True)
-
+        format_row("P", text, score, loc, is_positive=True, companion_score=neg_scores[i])
     print()
 
     for i, (text, score, loc) in enumerate(zip(neg_texts, neg_scores, neg_locs)):
-        format_row("N", text, score, loc, is_positive=False)
-
+        format_row("N", text, score, loc, is_positive=False, companion_score=pos_scores[i])
     print()
 
 

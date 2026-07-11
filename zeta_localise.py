@@ -34,8 +34,8 @@ MS_PER_TOKEN     = (SAMPLES_PER_TOKEN / SAMPLE_RATE) * 1000  # ≈ 32.05 ms
 
 LEAD_NAMES = ["I","II","III","aVR","aVL","aVF","V1","V2","V3","V4","V5","V6"]
 
-# ZETA Contrastive Scaling Temperature Factor
-SOFTMAX_TEMP = 0.07   
+# ZETA Contrastive Scaling Temperature Factor matching the authors' i / 0.5
+SOFTMAX_TEMP = 0.5   
 
 # attention heatmap thresholds
 DIFFUSE_ENTROPY_THRESHOLD = 0.85   # fraction of max entropy -> call it "diffuse"
@@ -61,7 +61,7 @@ def load_model(config_path: str, checkpoint_path: str, device: torch.device) -> 
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# ECG encoding
+# ECG encoding (Using Native Trained Pooler)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def encode_ecg(model: M3AEModel, ecg: np.ndarray, device: torch.device):
@@ -70,12 +70,15 @@ def encode_ecg(model: M3AEModel, ecg: np.ndarray, device: torch.device):
 
     with torch.no_grad():
         feats, padding_mask = model.ecg_encoder.get_embeddings(x, padding_mask=None)
-        cls_emb = model.class_embedding.repeat(1, 1, 1)
+        cls_emb = model.class_embedding.repeat(len(feats), 1, 1)
         feats_with_cls = torch.cat([cls_emb, feats], dim=1)
         feats_out = model.ecg_encoder.get_output(feats_with_cls, padding_mask)
+        
+        # Project sequence into the shared multimodal space
         proj = model.multi_modal_ecg_proj(feats_out)
         
-        ecg_vec = proj[:, 1:, :].mean(dim=1).squeeze(0)
+        # Use the native trained pooler module layer
+        ecg_vec = model.unimodal_ecg_pooler(proj).squeeze(0)
         ecg_vec = F.normalize(ecg_vec, dim=0)
 
     Lx_plus1 = feats_out.size(1)
@@ -85,7 +88,7 @@ def encode_ecg(model: M3AEModel, ecg: np.ndarray, device: torch.device):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Text encoding
+# Text encoding (Using Native Trained Pooler)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def encode_text(model: M3AEModel,
@@ -96,9 +99,12 @@ def encode_text(model: M3AEModel,
 
     with torch.no_grad():
         raw  = model.language_encoder(input_ids=enc["input_ids"])[0]
+        
+        # Project sequence into the shared multimodal space
         proj = model.multi_modal_language_proj(raw)
         
-        text_vec = proj.mean(dim=1).squeeze(0)
+        # Use the native trained pooler module layer
+        text_vec = model.unimodal_language_pooler(proj).squeeze(0)
         text_vec = F.normalize(text_vec, dim=0)
 
     return text_vec, proj.detach(), enc["attention_mask"]
@@ -183,7 +189,6 @@ def pick_dominant_lead(ecg: np.ndarray, start_ms: int, end_ms: int) -> int:
 def strength_label(probability_score: float, is_positive: bool) -> tuple[str, str]:
     """
     Determines UI highlight levels using absolute binary probability thresholds.
-    Assumes probability scores have been scaled via contrastive temperature.
     """
     effective = probability_score if is_positive else (1.0 - probability_score)
 
@@ -215,7 +220,7 @@ def run(ecg: np.ndarray,
     pos_texts = [t.lower() for t in observations[condition]["P"]]
     neg_texts = [t.lower() for t in observations[condition]["N"]]
 
-    # 1. Encode Modalities
+    # 1. Encode Modalities using native trained model poolers
     ecg_vec, ecg_seq, ecg_mask = encode_ecg(model, ecg, device)
 
     pos_vecs, pos_seqs, pos_masks = [], [], []
@@ -235,15 +240,13 @@ def run(ecg: np.ndarray,
     neg_probabilities = []
     
     for i in range(n_pairs):
-        # Calculate raw dot product similarities
         sim_p = (ecg_vec @ pos_vecs[i]).item()
         sim_n = (ecg_vec @ neg_vecs[i]).item()
         
-        # Scale by 1 / tau (0.07) to stretch target logits
+        # Scale by target temperature parameters
         logit_p = sim_p / SOFTMAX_TEMP
         logit_n = sim_n / SOFTMAX_TEMP
         
-        # Numerically stable evaluation block
         max_logit = max(logit_p, logit_n)
         exp_p = math.exp(logit_p - max_logit)
         exp_n = math.exp(logit_n - max_logit)
@@ -252,8 +255,8 @@ def run(ecg: np.ndarray,
         pos_probabilities.append(exp_p / total)
         neg_probabilities.append(exp_n / total)
 
-    # Condition final scores activate using max observation performance mapping
-    final_score = float(np.max(pos_probabilities))
+    # Aggregate structural observations using mean score composition
+    final_score = float(np.mean(pos_probabilities))
 
     # 3. Handle Localizations
     def localise(text_seq, text_mask):
@@ -295,126 +298,3 @@ def run(ecg: np.ndarray,
     def format_row(tag, text, score, loc, is_positive):
         start_ms, end_ms, lead_idx = loc
         loc_str = f"{start_ms}ms – {end_ms}ms  {LEAD_NAMES[lead_idx]}" if start_ms is not None else "diffuse"
-        bar, label = strength_label(score, is_positive)
-        obs_str = f"[{tag}] {text}"
-        print(f"  {obs_str:<{col_obs}}{score:>{col_scr}.2f}  {loc_str:<{col_loc}}{bar}  {label}")
-
-    for i in range(n_pairs):
-        format_row("P", pos_texts[i], pos_probabilities[i], pos_locs[i], is_positive=True)
-    print()
-    for i in range(n_pairs):
-        format_row("N", neg_texts[i], neg_probabilities[i], neg_locs[i], is_positive=False)
-    print()
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Entry point utils
-# ─────────────────────────────────────────────────────────────────────────────
-
-def load_ptbxl_record(ptbxl_root: str, filename_hr: str) -> np.ndarray:
-    path = str(Path(ptbxl_root) / filename_hr)
-    signal, fields = wfdb.rdsamp(path)
-    ecg = signal.astype(np.float32)
-    ecg = ecg[:5000, :]
-    ecg = ecg.T
-    ecg = (ecg - ecg.min()) / (ecg.max() - ecg.min() + 1e-8)
-    ecg[[4, 5]] = ecg[[5, 4]]  # Swap aVL and aVF for training alignment
-    return ecg.T
-
-
-def load_ptbxl_db(ptbxl_root: str):
-    db_path  = Path(ptbxl_root) / "ptbxl_database.csv"
-    scp_path = Path(ptbxl_root) / "scp_statements.csv"
-    db  = pd.read_csv(db_path,  index_col="ecg_id")
-    scp = pd.read_csv(scp_path, index_col=0)
-    return db, scp
-
-
-def find_filename_hr(ptbxl_root: str, ecg_id: int) -> str:
-    db, _ = load_ptbxl_db(ptbxl_root)
-    return db.loc[ecg_id, "filename_hr"]
-
-
-def get_ground_truth(ptbxl_root: str, ecg_id: int) -> dict:
-    db, scp = load_ptbxl_db(ptbxl_root)
-    row = db.loc[ecg_id]
-    raw_codes = ast.literal_eval(row["scp_codes"])
-
-    confirmed, uncertain = [], []
-    for code, likelihood in raw_codes.items():
-        if likelihood <= 0.0:
-            continue
-
-        if code in scp.index:
-            s = scp.loc[code]
-            description = str(s["description"])
-            categories  = {
-                "diagnostic_class":    s["diagnostic_class"] if pd.notna(s["diagnostic_class"]) else None,
-                "diagnostic_subclass": s["diagnostic_subclass"] if pd.notna(s["diagnostic_subclass"]) else None,
-                "rhythm": pd.notna(s["rhythm"]),
-                "form":   pd.notna(s["form"]),
-            }
-        else:
-            description = "(unknown)"
-            categories  = {}
-
-        entry = (code, likelihood, description, categories)
-        if likelihood >= 100.0:
-            confirmed.append(entry)
-        else:
-            uncertain.append(entry)
-
-    return {
-        "confirmed":  confirmed,
-        "uncertain":  uncertain,
-        "report":      str(row["report"]),
-        "strat_fold": int(row["strat_fold"]),
-    }
-
-
-def main():
-    load_dotenv()
-    PTBXL_DATASET = os.getenv("PTBXL_DATASET")
-    CHECKPOINT_PATH = os.getenv("CHECKPOINT_PATH")
-
-    parser = argparse.ArgumentParser(description="ZETA localisation for a single PTB-XL ECG")
-    ecg_group = parser.add_mutually_exclusive_group(required=True)
-    ecg_group.add_argument("--filename_hr")
-    ecg_group.add_argument("--ecg_id", type=int)
-
-    parser.add_argument("--ptbxl_root", default=PTBXL_DATASET)
-    parser.add_argument("--ground_truth", action="store_true")
-    parser.add_argument("--condition", required=True)
-    parser.add_argument("--checkpoint", default=CHECKPOINT_PATH)
-    parser.add_argument("--config", default="configs/config.json")
-    parser.add_argument("--observations", default="configs/observations.json")
-    parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
-
-    args = parser.parse_args()
-    device = torch.device(args.device)
-
-    if args.ptbxl_root is None or args.checkpoint is None:
-        print("ensure PTBXL_DATASET and CHECKPOINT_PATH are set in .env")
-        exit(1)
-
-    if args.ecg_id is not None:
-        filename_hr = find_filename_hr(args.ptbxl_root, args.ecg_id)
-    else:
-        filename_hr = args.filename_hr
-
-    ecg = load_ptbxl_record(args.ptbxl_root, filename_hr)
-    model = load_model(args.config, args.checkpoint, device)
-    tokenizer = T5TokenizerFast.from_pretrained("google/flan-t5-base", do_lower_case=True)
-
-    with open(args.observations) as f:
-        observations = json.load(f)
-
-    ground_truth = None
-    if args.ground_truth and args.ecg_id is not None:
-        ground_truth = get_ground_truth(args.ptbxl_root, args.ecg_id)
-
-    run(ecg, args.condition, model, tokenizer, observations, device, ground_truth)
-
-
-if __name__ == "__main__":
-    main()

@@ -59,9 +59,8 @@ def load_model(config_path: str, checkpoint_path: str, device: torch.device) -> 
     model.eval().to(device)
     return model
 
-
 # ─────────────────────────────────────────────────────────────────────────────
-# ECG encoding (Using Native Trained Pooler)
+# ECG encoding (Preserving dimensions for native pooler)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def encode_ecg(model: M3AEModel, ecg: np.ndarray, device: torch.device):
@@ -74,10 +73,10 @@ def encode_ecg(model: M3AEModel, ecg: np.ndarray, device: torch.device):
         feats_with_cls = torch.cat([cls_emb, feats], dim=1)
         feats_out = model.ecg_encoder.get_output(feats_with_cls, padding_mask)
         
-        # Project sequence into the shared multimodal space
+        # Project sequence into shared multimodal space
         proj = model.multi_modal_ecg_proj(feats_out)
         
-        # Use the native trained pooler module layer
+        # Pass full sequence matrix into pooler before squeezing
         ecg_vec = model.unimodal_ecg_pooler(proj).squeeze(0)
         ecg_vec = F.normalize(ecg_vec, dim=0)
 
@@ -88,7 +87,7 @@ def encode_ecg(model: M3AEModel, ecg: np.ndarray, device: torch.device):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Text encoding (Using Native Trained Pooler)
+# Text encoding (Preserving dimensions for native pooler)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def encode_text(model: M3AEModel,
@@ -100,10 +99,10 @@ def encode_text(model: M3AEModel,
     with torch.no_grad():
         raw  = model.language_encoder(input_ids=enc["input_ids"])[0]
         
-        # Project sequence into the shared multimodal space
+        # Project sequence into shared multimodal space
         proj = model.multi_modal_language_proj(raw)
         
-        # Use the native trained pooler module layer
+        # Pass full sequence matrix into pooler before squeezing
         text_vec = model.unimodal_language_pooler(proj).squeeze(0)
         text_vec = F.normalize(text_vec, dim=0)
 
@@ -203,7 +202,7 @@ def strength_label(probability_score: float, is_positive: bool) -> tuple[str, st
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Main pipeline
+# Main pipeline (Exact implementation of the author similarity logic)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def run(ecg: np.ndarray,
@@ -220,7 +219,7 @@ def run(ecg: np.ndarray,
     pos_texts = [t.lower() for t in observations[condition]["P"]]
     neg_texts = [t.lower() for t in observations[condition]["N"]]
 
-    # 1. Encode Modalities using native trained model poolers
+    # 1. Encode Modalities
     ecg_vec, ecg_seq, ecg_mask = encode_ecg(model, ecg, device)
 
     pos_vecs, pos_seqs, pos_masks = [], [], []
@@ -235,17 +234,27 @@ def run(ecg: np.ndarray,
 
     n_pairs = min(len(pos_vecs), len(neg_vecs))
     
-    # 2. Compute Temperature-Scaled Pairwise Softmax
+    # 2. Compute Raw Matrix Similarities exactly like the authors
+    similarities_p = []
+    similarities_n = []
+    
+    for i in range(n_pairs):
+        # Authors match shape via: (ecg_feature @ F.normalize(l, dim=0).reshape(1, -1).T)[0]
+        # Since our vectors are already normalized in the functions above, dot product suffices:
+        sim_p = (ecg_vec @ pos_vecs[i]).item()
+        sim_n = (ecg_vec @ neg_vecs[i]).item()
+        
+        similarities_p.append(sim_p)
+        similarities_n.append(sim_n)
+
+    # 3. Apply Pairwise Softmax matching get_diseases_probs
     pos_probabilities = []
     neg_probabilities = []
     
     for i in range(n_pairs):
-        sim_p = (ecg_vec @ pos_vecs[i]).item()
-        sim_n = (ecg_vec @ neg_vecs[i]).item()
-        
-        # Scale by target temperature parameters
-        logit_p = sim_p / SOFTMAX_TEMP
-        logit_n = sim_n / SOFTMAX_TEMP
+        # Replicates: torch.softmax(i / 0.5, dim=0)
+        logit_p = similarities_p[i] / SOFTMAX_TEMP
+        logit_n = similarities_n[i] / SOFTMAX_TEMP
         
         max_logit = max(logit_p, logit_n)
         exp_p = math.exp(logit_p - max_logit)
@@ -255,10 +264,10 @@ def run(ecg: np.ndarray,
         pos_probabilities.append(exp_p / total)
         neg_probabilities.append(exp_n / total)
 
-    # Aggregate structural observations using mean score composition
+    # final score calculation: similarity = torch.mean(torch.tensor(feature_p).cpu())
     final_score = float(np.mean(pos_probabilities))
 
-    # 3. Handle Localizations
+    # 4. Handle Localizations
     def localise(text_seq, text_mask):
         heatmap = get_cross_attention_heatmap(
             model, text_seq, text_mask, ecg_seq, ecg_mask, device
@@ -272,7 +281,7 @@ def run(ecg: np.ndarray,
     pos_locs = [localise(s, m) for s, m in zip(pos_seqs, pos_masks)]
     neg_locs = [localise(s, m) for s, m in zip(neg_seqs, neg_masks)]
 
-    # 4. Interface Print Dashboard Logs
+    # 5. Interface Print Dashboard Logs
     print()
     if ground_truth is not None:
         fold = ground_truth["strat_fold"]
@@ -308,7 +317,6 @@ def run(ecg: np.ndarray,
     for i in range(n_pairs):
         format_row("N", neg_texts[i], neg_probabilities[i], neg_locs[i], is_positive=False)
     print()
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Entry point utils

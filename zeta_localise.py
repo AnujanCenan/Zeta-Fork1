@@ -43,6 +43,9 @@ from transformers import T5TokenizerFast
 # ── repo imports (run from Zeta/ directory) ──────────────────────────────────
 from models.cmelt import M3AEModel
 
+from dotenv import load_dotenv
+import os
+
 # ── constants ────────────────────────────────────────────────────────────────
 SAMPLE_RATE      = 500          # Hz
 ECG_LENGTH       = 5000         # samples (10 s)
@@ -610,6 +613,11 @@ def get_ground_truth(ptbxl_root: str, ecg_id: int) -> dict:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def main():
+
+    load_dotenv()
+    PTBXL_DATASET = os.getenv("PTBXL_DATASET")
+    CHECKPOINT_PATH = os.getenv("CHECKPOINT_PATH")
+
     parser = argparse.ArgumentParser(description="ZETA localisation for a single PTB-XL ECG")
 
     # --- ECG source (one of two options) ---
@@ -633,7 +641,7 @@ def main():
 
     parser.add_argument(
         "--ptbxl_root",
-        required=True,
+        default=PTBXL_DATASET,
         help="Root directory of the PTB-XL dataset (contains ptbxl_database.csv and records500/)."
     )
 
@@ -648,13 +656,17 @@ def main():
     )
     parser.add_argument("--condition",    required=True,
                         help="Condition code from observations.json, e.g. 1AVB, AFIB, WPW")
-    parser.add_argument("--checkpoint",   default="checkpoints/best.pt")
+    parser.add_argument("--checkpoint",   default=CHECKPOINT_PATH)
     parser.add_argument("--config",       default="configs/config.json")
     parser.add_argument("--observations", default="configs/observations.json")
     parser.add_argument("--device",       default="cuda" if torch.cuda.is_available() else "cpu")
 
     args = parser.parse_args()
     device = torch.device(args.device)
+
+    if args.ptbxl_root is None or args.checkpoint is None:
+        print("ensure PTBXL_DATASET and CHECKPOINT_PATH are set in .env")
+        exit(1)
 
     # --- resolve PTB-XL record ---
     if args.ecg_id is not None:

@@ -59,7 +59,7 @@ LEAD_NAMES = ["I","II","III","aVR","aVL","aVF","V1","V2","V3","V4","V5","V6"]
 SOFTMAX_TEMP = 0.5   # matches ZETA paper / get_diseases_probs()
 
 # attention heatmap thresholds
-DIFFUSE_ENTROPY_THRESHOLD = 0.85   # fraction of max entropy → call it "diffuse"
+DIFFUSE_ENTROPY_THRESHOLD = 0.85   # fraction of max entropy -> call it "diffuse"
 MIN_INTERVAL_TOKENS       = 3      # smallest meaningful interval (~96 ms)
 PEAK_PERCENTILE           = 75     # tokens above this percentile form the interval
 
@@ -135,19 +135,15 @@ def encode_text(model: M3AEModel,
                 text: str,
                 device: torch.device):
     """
-    Returns
-    -------
-    text_vec  : (768,) normalised pooled vector
-    text_seq  : (1, Lt, 768) full token sequence (post-proj, for cross-attention)
-    text_mask : attention mask (1, Lt)
+    Encodes the diagnostic observation text into both a normalized global embedding 
+    vector and a token-level sequence representation aligned with the shared 
+    multimodal space.
 
-    Pooling strategy: mean over all tokens from the raw Flan-T5 output,
-    BEFORE multi_modal_language_proj. Diagnostics show this gives the best
-    separation between positive and negative observations (sep=0.0174),
-    outperforming post-proj and CLS-based strategies.
-
-    text_seq is still returned post-proj so the cross-attention fusion
-    module operates in the shared 768-d space as intended.
+    This function extracts embeddings from the textual modality. Crucially, the 
+    global text vector (`text_vec`) is pooled *after* passing through the multimodal 
+    projection layer (`multi_modal_language_proj`). This maps the language features into 
+    the same 768-dimensional shared metric space as the ECG vectors, allowing for 
+    direct dot-product similarity calculation during zero-shot evaluation.
     """
     enc = tokenizer(text, truncation=True, return_tensors="pt").to(device)
 
@@ -155,8 +151,7 @@ def encode_text(model: M3AEModel,
         raw  = model.language_encoder(input_ids=enc["input_ids"])[0]  # (1, Lt, 768)
         proj = model.multi_modal_language_proj(raw)                    # (1, Lt, 768)
 
-        # mean pool over all tokens from raw Flan-T5 output (pre-proj)
-        text_vec = raw.mean(dim=1).squeeze(0)                          # (768,)
+        text_vec = proj.mean(dim=1).squeeze(0)                         # (768,)
         text_vec = F.normalize(text_vec, dim=0)
 
     return text_vec, proj.detach(), enc["attention_mask"]
@@ -243,13 +238,13 @@ def get_cross_attention_heatmap(model: M3AEModel,
             all_cross_attn.append(cross_attn)
             x = outputs[0]   # feed updated text sequence to next layer
 
-    # stack layers → (6, 1, 12, Lt, Lx+1)
+    # stack layers -> (6, 1, 12, Lt, Lx+1)
     stacked = torch.stack(all_cross_attn, dim=0)
 
-    # mean over layers, batch, heads, text-tokens → (Lx+1,)
+    # mean over layers, batch, heads, text-tokens -> (Lx+1,)
     heatmap_with_cls = stacked.mean(dim=0).mean(dim=0).mean(dim=0).mean(dim=0)
 
-    # drop CLS token at index 0 → (Lx,)  = (312,)
+    # drop CLS token at index 0 -> (Lx,)  = (312,)
     heatmap = heatmap_with_cls[1:]
 
     return heatmap.cpu()
@@ -470,7 +465,7 @@ def run(ecg: np.ndarray,
 
     for i, (text, score, loc) in enumerate(zip(neg_texts, neg_scores, neg_locs)):
         # neg_scores[i] is the softmax prob of the negative observation winning —
-        # a LOW neg score means the neg feature is absent → supports the condition
+        # a LOW neg score means the neg feature is absent -> supports the condition
         format_row("N", text, score, loc, is_positive=False)
 
     print()
@@ -505,7 +500,7 @@ def load_ptbxl_record(ptbxl_root: str, filename_hr: str) -> np.ndarray:
 
     ecg = signal.astype(np.float32)      # (T, 12)
     ecg = ecg[:5000, :]                  # guard: ensure exactly 5000 samples
-    ecg = ecg.T                          # → (12, 5000) for normalisation
+    ecg = ecg.T                          # -> (12, 5000) for normalisation
 
     # normalise to [0, 1] per recording — matches data_load.py
     ecg = (ecg - ecg.min()) / (ecg.max() - ecg.min() + 1e-8)
@@ -515,7 +510,7 @@ def load_ptbxl_record(ptbxl_root: str, filename_hr: str) -> np.ndarray:
     # MIMIC order:  I II III aVR aVF aVL V1-V6
     ecg[[4, 5]] = ecg[[5, 4]]
 
-    return ecg.T   # → (5000, 12) time-first
+    return ecg.T   # -> (5000, 12) time-first
 
 
 def load_ptbxl_db(ptbxl_root: str) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -672,13 +667,13 @@ def main():
     if args.ecg_id is not None:
         print(f"Looking up ecg_id {args.ecg_id} in ptbxl_database.csv ...")
         filename_hr = find_filename_hr(args.ptbxl_root, args.ecg_id)
-        print(f"  → filename_hr: {filename_hr}")
+        print(f"  -> filename_hr: {filename_hr}")
     else:
         filename_hr = args.filename_hr
 
     print(f"Loading ECG: {filename_hr} ...")
     ecg = load_ptbxl_record(args.ptbxl_root, filename_hr)
-    print(f"  → shape {ecg.shape}, min {ecg.min():.3f}, max {ecg.max():.3f}")
+    print(f"  -> shape {ecg.shape}, min {ecg.min():.3f}, max {ecg.max():.3f}")
 
     # --- load model ---
     print(f"Loading model from {args.checkpoint} ...")

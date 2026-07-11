@@ -21,7 +21,6 @@ from transformers import T5TokenizerFast
 
 # ── repo imports (run from Zeta/ directory) ──────────────────────────────────
 from models.cmelt import M3AEModel
-
 from dotenv import load_dotenv
 import os
 
@@ -35,7 +34,7 @@ MS_PER_TOKEN     = (SAMPLES_PER_TOKEN / SAMPLE_RATE) * 1000  # ≈ 32.05 ms
 
 LEAD_NAMES = ["I","II","III","aVR","aVL","aVF","V1","V2","V3","V4","V5","V6"]
 
-# FIX: Lower temperature to match standard contrastive logit scaling (e.g., 1 / 0.07 ≈ 14.3 multiplier)
+# ZETA Contrastive Scaling Temperature Factor
 SOFTMAX_TEMP = 0.07   
 
 # attention heatmap thresholds
@@ -55,7 +54,6 @@ def load_model(config_path: str, checkpoint_path: str, device: torch.device) -> 
     model = M3AEModel(cfg)
     checkpoint = torch.load(checkpoint_path, map_location=device)
     state = checkpoint["model"]
-    # remove key that is only present during pre-training
     state.pop("ecg_encoder.mask_emb", None)
     model.load_state_dict(state, strict=True)
     model.eval().to(device)
@@ -63,30 +61,23 @@ def load_model(config_path: str, checkpoint_path: str, device: torch.device) -> 
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# ECG encoding  (unimodal path — same as main.py)
+# ECG encoding
 # ─────────────────────────────────────────────────────────────────────────────
 
 def encode_ecg(model: M3AEModel, ecg: np.ndarray, device: torch.device):
-    x = torch.tensor(ecg, dtype=torch.float32).unsqueeze(0).to(device)  # (1,5000,12)
-    x = x.permute(0, 2, 1)                                               # (1,12,5000)
+    x = torch.tensor(ecg, dtype=torch.float32).unsqueeze(0).to(device)
+    x = x.permute(0, 2, 1)
 
     with torch.no_grad():
         feats, padding_mask = model.ecg_encoder.get_embeddings(x, padding_mask=None)
-        # feats: (1, 312, 768) — no CLS yet
-
-        # prepend CLS for the transformer (needed for get_output)
-        cls_emb = model.class_embedding.repeat(1, 1, 1)          # (1,1,768)
-        feats_with_cls = torch.cat([cls_emb, feats], dim=1)      # (1,313,768)
+        cls_emb = model.class_embedding.repeat(1, 1, 1)
+        feats_with_cls = torch.cat([cls_emb, feats], dim=1)
         feats_out = model.ecg_encoder.get_output(feats_with_cls, padding_mask)
-
-        # project to shared space
-        proj = model.multi_modal_ecg_proj(feats_out)             # (1,313,768)
-
-        # mean pool over sequence tokens only (skip CLS at index 0)
-        ecg_vec = proj[:, 1:, :].mean(dim=1).squeeze(0)          # (768,)
+        proj = model.multi_modal_ecg_proj(feats_out)
+        
+        ecg_vec = proj[:, 1:, :].mean(dim=1).squeeze(0)
         ecg_vec = F.normalize(ecg_vec, dim=0)
 
-    # build attention mask (all ones — no padding for fixed-length ECG)
     Lx_plus1 = feats_out.size(1)
     ecg_mask = torch.ones((1, Lx_plus1), dtype=torch.long, device=device)
 
@@ -94,63 +85,24 @@ def encode_ecg(model: M3AEModel, ecg: np.ndarray, device: torch.device):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Text encoding  (unimodal path)
+# Text encoding
 # ─────────────────────────────────────────────────────────────────────────────
 
 def encode_text(model: M3AEModel,
                 tokenizer: T5TokenizerFast,
                 text: str,
                 device: torch.device) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """
-    Encodes the diagnostic observation text into both a normalized global embedding 
-    vector and a token-level sequence representation aligned with the shared 
-    multimodal space.
-    """
     enc = tokenizer(text, truncation=True, return_tensors="pt").to(device)
 
     with torch.no_grad():
-        raw  = model.language_encoder(input_ids=enc["input_ids"])[0]  # (1, Lt, 768)
-        proj = model.multi_modal_language_proj(raw)                    # (1, Lt, 768)
-
-        # FIX: Mean pool over the projected tokens (shared space), NOT raw
-        text_vec = proj.mean(dim=1).squeeze(0)                         # (768,)
+        raw  = model.language_encoder(input_ids=enc["input_ids"])[0]
+        proj = model.multi_modal_language_proj(raw)
+        
+        text_vec = proj.mean(dim=1).squeeze(0)
         text_vec = F.normalize(text_vec, dim=0)
 
     return text_vec, proj.detach(), enc["attention_mask"]
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Similarity scoring  (ZETA pairwise softmax — matches get_diseases_probs)
-# ─────────────────────────────────────────────────────────────────────────────
-
-def pairwise_score(ecg_vec: torch.Tensor,
-                   pos_vecs: list[torch.Tensor],
-                   neg_vecs: list[torch.Tensor]) -> tuple[list[float], list[float]]:
-    """
-    Computes a binary softmax for each distinct (Pos, Neg) feature pair independently,
-    properly scaling the raw cosine similarities by the contrastive temperature 
-    before exponentiation to widen the dynamic range.
-    """
-    pos_scores, neg_scores = [], []
-    for p_vec, n_vec in zip(pos_vecs, neg_vecs):
-        # 1. Get raw cosine similarities (dot product of L2-normalized vectors)
-        sim_p = (ecg_vec @ p_vec).item()
-        sim_n = (ecg_vec @ n_vec).item()
-        
-        # 2. Scale by the contrastive temperature (dividing by 0.07 multiplying by ~14.3)
-        logit_p = sim_p / SOFTMAX_TEMP
-        logit_n = sim_n / SOFTMAX_TEMP
-        
-        # 3. Compute stable binary softmax
-        max_logit = max(logit_p, logit_n)
-        exp_p = math.exp(logit_p - max_logit)
-        exp_n = math.exp(logit_n - max_logit)
-        total = exp_p + exp_n
-        
-        pos_scores.append(exp_p / total)
-        neg_scores.append(exp_n / total)
-        
-    return pos_scores, neg_scores
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Cross-attention localisation
@@ -162,28 +114,17 @@ def get_cross_attention_heatmap(model: M3AEModel,
                                 ecg_seq: torch.Tensor,
                                 ecg_mask: torch.Tensor,
                                 device: torch.device) -> torch.Tensor:
-    # add modality-type embeddings — must match the forward() in cmelt.py
-    text_ids_dummy = torch.zeros(
-        (1, text_seq.size(1)), dtype=torch.long, device=device
-    )
-    ecg_ids_dummy = torch.ones(
-        (1, ecg_seq.size(1)), dtype=torch.long, device=device
-    )
+    text_ids_dummy = torch.zeros((1, text_seq.size(1)), dtype=torch.long, device=device)
+    ecg_ids_dummy = torch.ones((1, ecg_seq.size(1)), dtype=torch.long, device=device)
 
     with torch.no_grad():
         x = text_seq + model.modality_type_embeddings(text_ids_dummy)
         y = ecg_seq  + model.modality_type_embeddings(ecg_ids_dummy)
 
-        # extended masks (additive, matching cmelt.py)
-        ext_text_mask = model.language_encoder.get_extended_attention_mask(
-            text_mask, text_mask.size()
-        )
-        ext_ecg_mask = model.language_encoder.get_extended_attention_mask(
-            ecg_mask, ecg_mask.size()
-        )
+        ext_text_mask = model.language_encoder.get_extended_attention_mask(text_mask, text_mask.size())
+        ext_ecg_mask = model.language_encoder.get_extended_attention_mask(ecg_mask, ecg_mask.size())
 
-        all_cross_attn = []  # one tensor per layer
-
+        all_cross_attn = []
         for text_layer in model.multi_modal_language_layers:
             outputs = text_layer(
                 x, y,
@@ -191,17 +132,12 @@ def get_cross_attention_heatmap(model: M3AEModel,
                 encoder_attention_mask=ext_ecg_mask,
                 output_attentions=True,
             )
-            cross_attn = outputs[2]   # (1, 12_heads, Lt, Lx+1)
+            cross_attn = outputs[2]
             all_cross_attn.append(cross_attn)
-            x = outputs[0]   # feed updated text sequence to next layer
+            x = outputs[0]
 
-    # stack layers -> (6, 1, 12, Lt, Lx+1)
     stacked = torch.stack(all_cross_attn, dim=0)
-
-    # mean over layers, batch, heads, text-tokens -> (Lx+1,)
     heatmap_with_cls = stacked.mean(dim=0).mean(dim=0).mean(dim=0).mean(dim=0)
-
-    # drop CLS token at index 0 -> (Lx,)  = (312,)
     heatmap = heatmap_with_cls[1:]
 
     return heatmap.cpu()
@@ -209,23 +145,19 @@ def get_cross_attention_heatmap(model: M3AEModel,
 
 def heatmap_to_interval(heatmap: torch.Tensor, lead_axis: int = 1):
     n_tokens = len(heatmap)
-
-    # normalise to [0,1]
     h = heatmap.float()
     h = (h - h.min()) / (h.max() - h.min() + 1e-8)
 
-    # diffuseness: compare actual entropy to maximum possible entropy
     probs = h / (h.sum() + 1e-8)
     entropy = -(probs * (probs + 1e-8).log()).sum().item()
     max_entropy = math.log(n_tokens)
     diffuse = (entropy / max_entropy) > DIFFUSE_ENTROPY_THRESHOLD
 
-    # threshold: tokens above PEAK_PERCENTILE
     threshold = torch.quantile(h, PEAK_PERCENTILE / 100.0).item()
     active = (h >= threshold).nonzero(as_tuple=True)[0]
 
     if len(active) < MIN_INTERVAL_TOKENS or diffuse:
-        return None, None, True   # diffuse
+        return None, None, True
 
     start_token = active[0].item()
     end_token   = active[-1].item()
@@ -236,12 +168,10 @@ def heatmap_to_interval(heatmap: torch.Tensor, lead_axis: int = 1):
     return start_ms, end_ms, False
 
 
-def pick_dominant_lead(ecg: np.ndarray,
-                       start_ms: int,
-                       end_ms: int) -> int:
+def pick_dominant_lead(ecg: np.ndarray, start_ms: int, end_ms: int) -> int:
     start_sample = int(start_ms / 1000 * SAMPLE_RATE)
     end_sample   = int(end_ms   / 1000 * SAMPLE_RATE)
-    segment = ecg[start_sample:end_sample, :]   # (samples, 12)
+    segment = ecg[start_sample:end_sample, :]
     variances = segment.var(axis=0)
     return int(np.argmax(variances))
 
@@ -250,11 +180,12 @@ def pick_dominant_lead(ecg: np.ndarray,
 # Strength label
 # ─────────────────────────────────────────────────────────────────────────────
 
-def strength_label(score: float, is_positive: bool) -> tuple[str, str]:
+def strength_label(probability_score: float, is_positive: bool) -> tuple[str, str]:
     """
     Determines UI highlight levels using absolute binary probability thresholds.
+    Assumes probability scores have been scaled via contrastive temperature.
     """
-    effective = score if is_positive else (1.0 - score)
+    effective = probability_score if is_positive else (1.0 - probability_score)
 
     if effective >= 0.70:
         return "████████", "highlight strongly"
@@ -264,7 +195,7 @@ def strength_label(score: float, is_positive: bool) -> tuple[str, str]:
         return "████    ", "highlight weakly"
     else:
         return "░░      ", "suppress"
-    
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Main pipeline
@@ -284,10 +215,9 @@ def run(ecg: np.ndarray,
     pos_texts = [t.lower() for t in observations[condition]["P"]]
     neg_texts = [t.lower() for t in observations[condition]["N"]]
 
-    # 1. Encode ECG Modality
+    # 1. Encode Modalities
     ecg_vec, ecg_seq, ecg_mask = encode_ecg(model, ecg, device)
 
-    # 2. Encode Text Modalities
     pos_vecs, pos_seqs, pos_masks = [], [], []
     for t in pos_texts:
         v, s, m = encode_text(model, tokenizer, t, device)
@@ -298,30 +228,34 @@ def run(ecg: np.ndarray,
         v, s, m = encode_text(model, tokenizer, t, device)
         neg_vecs.append(v); neg_seqs.append(s); neg_masks.append(m)
 
-    # 3. Calculate Scaled Pairwise Softmax Scores
     n_pairs = min(len(pos_vecs), len(neg_vecs))
     
-    pos_scores, neg_scores = [], []
-    for p_vec, n_vec in zip(pos_vecs[:n_pairs], neg_vecs[:n_pairs]):
-        sim_p = (ecg_vec @ p_vec).item()
-        sim_n = (ecg_vec @ n_vec).item()
+    # 2. Compute Temperature-Scaled Pairwise Softmax
+    pos_probabilities = []
+    neg_probabilities = []
+    
+    for i in range(n_pairs):
+        # Calculate raw dot product similarities
+        sim_p = (ecg_vec @ pos_vecs[i]).item()
+        sim_n = (ecg_vec @ neg_vecs[i]).item()
         
-        # Explicit temperature scaling step
+        # Scale by 1 / tau (0.07) to stretch target logits
         logit_p = sim_p / SOFTMAX_TEMP
         logit_n = sim_n / SOFTMAX_TEMP
         
+        # Numerically stable evaluation block
         max_logit = max(logit_p, logit_n)
         exp_p = math.exp(logit_p - max_logit)
         exp_n = math.exp(logit_n - max_logit)
         total = exp_p + exp_n
         
-        pos_scores.append(exp_p / total)
-        neg_scores.append(exp_n / total)
+        pos_probabilities.append(exp_p / total)
+        neg_probabilities.append(exp_n / total)
 
-    # Use max() instead of mean() for multi-feature rule activation mapping
-    final_score = float(np.max(pos_scores))
+    # Condition final scores activate using max observation performance mapping
+    final_score = float(np.max(pos_probabilities))
 
-    # 4. Cross-Attention Localization Maps
+    # 3. Handle Localizations
     def localise(text_seq, text_mask):
         heatmap = get_cross_attention_heatmap(
             model, text_seq, text_mask, ecg_seq, ecg_mask, device
@@ -335,14 +269,13 @@ def run(ecg: np.ndarray,
     pos_locs = [localise(s, m) for s, m in zip(pos_seqs, pos_masks)]
     neg_locs = [localise(s, m) for s, m in zip(neg_seqs, neg_masks)]
 
-    # 5. Dashboard Output Logs
+    # 4. Interface Print Dashboard Logs
     print()
     if ground_truth is not None:
         fold = ground_truth["strat_fold"]
         fold_note = " (official test set)" if fold == 10 else f" (fold {fold})"
         print(f"Report:     {ground_truth['report']}{fold_note}")
         print()
-
         if condition in [e[0] for e in ground_truth["confirmed"]]:
             gt_marker = f"✓  '{condition}' is CONFIRMED in this ECG (likelihood 100%)"
         elif condition in [e[0] for e in ground_truth["uncertain"]]:
@@ -367,11 +300,12 @@ def run(ecg: np.ndarray,
         print(f"  {obs_str:<{col_obs}}{score:>{col_scr}.2f}  {loc_str:<{col_loc}}{bar}  {label}")
 
     for i in range(n_pairs):
-        format_row("P", pos_texts[i], pos_scores[i], pos_locs[i], is_positive=True)
+        format_row("P", pos_texts[i], pos_probabilities[i], pos_locs[i], is_positive=True)
     print()
     for i in range(n_pairs):
-        format_row("N", neg_texts[i], neg_scores[i], neg_locs[i], is_positive=False)
+        format_row("N", neg_texts[i], neg_probabilities[i], neg_locs[i], is_positive=False)
     print()
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Entry point utils
@@ -380,11 +314,11 @@ def run(ecg: np.ndarray,
 def load_ptbxl_record(ptbxl_root: str, filename_hr: str) -> np.ndarray:
     path = str(Path(ptbxl_root) / filename_hr)
     signal, fields = wfdb.rdsamp(path)
-    ecg = signal.astype(np.float32)      # (T, 12)
-    ecg = ecg[:5000, :]                  # guard
-    ecg = ecg.T                          # -> (12, 5000)
+    ecg = signal.astype(np.float32)
+    ecg = ecg[:5000, :]
+    ecg = ecg.T
     ecg = (ecg - ecg.min()) / (ecg.max() - ecg.min() + 1e-8)
-    ecg[[4, 5]] = ecg[[5, 4]]            # Swap aVL and aVF for training alignment
+    ecg[[4, 5]] = ecg[[5, 4]]  # Swap aVL and aVF for training alignment
     return ecg.T
 
 
@@ -433,7 +367,7 @@ def get_ground_truth(ptbxl_root: str, ecg_id: int) -> dict:
     return {
         "confirmed":  confirmed,
         "uncertain":  uncertain,
-        "report":     str(row["report"]),
+        "report":      str(row["report"]),
         "strat_fold": int(row["strat_fold"]),
     }
 

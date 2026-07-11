@@ -127,20 +127,34 @@ def pairwise_score(ecg_vec: torch.Tensor,
                    pos_vecs: list[torch.Tensor],
                    neg_vecs: list[torch.Tensor]) -> tuple[list[float], list[float]]:
     """
-    For each (pos_i, neg_i) pair compute softmax probability that pos wins.
+    Computes a global softmax across all candidate observation text vectors 
+    simultaneously, matching ZETA's contrastive space deployment strategy.
     """
-    pos_scores, neg_scores = [], []
-    for p_vec, n_vec in zip(pos_vecs, neg_vecs):
-        sim_p = (ecg_vec @ p_vec).item()
-        sim_n = (ecg_vec @ n_vec).item()
-        
-        # Softmax computed using the scaled temperature constant
-        exp_p = math.exp(sim_p / SOFTMAX_TEMP)
-        exp_n = math.exp(sim_n / SOFTMAX_TEMP)
-        total = exp_p + exp_n
-        pos_scores.append(exp_p / total)
-        neg_scores.append(exp_n / total)
-    return pos_scores, neg_scores
+    n_pairs = min(len(pos_vecs), len(neg_vecs))
+    
+    # Slice vectors to match pairs length
+    p_vecs = pos_vecs[:n_pairs]
+    n_vecs = neg_vecs[:n_pairs]
+
+    # Stack into matrices: shape (n_pairs, 768)
+    P = torch.stack(p_vecs)
+    N = torch.stack(n_vecs)
+
+    # 1. Compute all raw similarities simultaneously
+    sim_p = ecg_vec @ P.T  # shape: (n_pairs,)
+    sim_n = ecg_vec @ N.T  # shape: (n_pairs,)
+
+    # 2. Combine all logits into a single global pool: shape (2 * n_pairs,)
+    all_logits = torch.cat([sim_p, sim_n]) / SOFTMAX_TEMP
+
+    # 3. Apply global Softmax normalization across the entire contrastive field
+    all_probs = F.softmax(all_logits, dim=0)
+
+    # 4. Split probabilities back into their matching positive and negative buckets
+    pos_probs = all_probs[:n_pairs].tolist()
+    neg_probs = all_probs[n_pairs:].tolist()
+
+    return pos_probs, neg_probs
 
 
 # ─────────────────────────────────────────────────────────────────────────────

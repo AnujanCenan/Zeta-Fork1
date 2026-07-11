@@ -41,9 +41,9 @@ SOFTMAX_TEMP = 0.5
 VISUAL_TEMP = 0.02
 
 # attention heatmap thresholds
-DIFFUSE_ENTROPY_THRESHOLD = 0.85   # fraction of max entropy -> call it "diffuse"
+DIFFUSE_ENTROPY_THRESHOLD = 0.88   # Marginally expanded to handle cross-modal bias
 MIN_INTERVAL_TOKENS       = 3      # smallest meaningful interval (~96 ms)
-PEAK_PERCENTILE           = 75     # tokens above this percentile form the interval
+PEAK_PERCENTILE           = 85     # Focus strictly on the top attention peaks
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -63,11 +63,10 @@ def load_model(config_path: str, checkpoint_path: str, device: torch.device) -> 
     return model
 
 # ─────────────────────────────────────────────────────────────────────────────
-# ECG encoding (Exact Author Architecture Match)
+# ECG encoding
 # ─────────────────────────────────────────────────────────────────────────────
 
 def encode_ecg(model: M3AEModel, ecg: np.ndarray, device: torch.device):
-    # Ensure shape matches exactly: [1, 12, 5000] -> permuted to [1, 5000, 12]
     x = torch.tensor(ecg, dtype=torch.float32).unsqueeze(0).to(device)
     x = x.permute(0, 2, 1)
 
@@ -79,8 +78,6 @@ def encode_ecg(model: M3AEModel, ecg: np.ndarray, device: torch.device):
         uni_modal_ecg_feats = model.ecg_encoder.get_output(uni_modal_ecg_feats, ecg_padding_mask)
         
         out = model.multi_modal_ecg_proj(uni_modal_ecg_feats)
-        
-        # Native pooler executes on full batch dimension [1, seq_len, dim]
         ecg_features = model.unimodal_ecg_pooler(out)
         
         ecg_vec = ecg_features.squeeze(0) 
@@ -93,7 +90,7 @@ def encode_ecg(model: M3AEModel, ecg: np.ndarray, device: torch.device):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Text encoding (Fixed Padding Configuration Match)
+# Text encoding
 # ─────────────────────────────────────────────────────────────────────────────
 
 def encode_text(model: M3AEModel,
@@ -101,7 +98,6 @@ def encode_text(model: M3AEModel,
                 text: str,
                 device: torch.device) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     
-    # FIX: Explicitly match the fixed-length tensor layout used during model training
     encoded_input = tokenizer(
         text, 
         padding="max_length", 
@@ -113,10 +109,7 @@ def encode_text(model: M3AEModel,
     with torch.no_grad():
         outputs = model.language_encoder(**encoded_input)[0]
         outputs = model.multi_modal_language_proj(outputs)
-        
-        # Native pooler executes on full sequence representation
         max_pooled_features = model.unimodal_language_pooler(outputs)
-        
         text_vec = max_pooled_features.squeeze(0) 
 
     return text_vec, outputs.detach(), encoded_input["attention_mask"]
@@ -149,18 +142,26 @@ def get_cross_attention_heatmap(model: M3AEModel,
                 encoder_attention_mask=ext_ecg_mask,
                 output_attentions=True,
             )
+            # cross_attn matrix shape: [1, num_heads, text_seq_len, ecg_seq_len]
             cross_attn = outputs[2]
             all_cross_attn.append(cross_attn)
             x = outputs[0]
 
-    stacked = torch.stack(all_cross_attn, dim=0)
-    heatmap_with_cls = stacked.mean(dim=0).mean(dim=0).mean(dim=0).mean(dim=0)
-    heatmap = heatmap_with_cls[1:]
+    # Average across layers and attention heads
+    stacked = torch.stack(all_cross_attn, dim=0).mean(dim=0).squeeze(0) # Shape: [num_heads, text_seq_len, ecg_seq_len]
+    stacked = stacked.mean(dim=0) # Shape: [text_seq_len, ecg_seq_len]
+
+    # FIX: Isolate only rows belonging to valid text tokens, then average along the text axis 
+    valid_text_len = int(text_mask.sum().item())
+    ecg_timeline_heatmap = stacked[:valid_text_len, :].mean(dim=0) # Shape: [ecg_seq_len]
+
+    # Chop off the first element corresponding to the CLS token, leaving the 312 temporal tokens intact
+    heatmap = ecg_timeline_heatmap[1:]
 
     return heatmap.cpu()
 
 
-def heatmap_to_interval(heatmap: torch.Tensor, lead_axis: int = 1):
+def heatmap_to_interval(heatmap: torch.Tensor):
     n_tokens = len(heatmap)
     h = heatmap.float()
     h = (h - h.min()) / (h.max() - h.min() + 1e-8)
@@ -211,7 +212,7 @@ def strength_label(probability_score: float, is_positive: bool) -> tuple[str, st
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Main pipeline (Exact Author Matrix Multiplication Loop)
+# Main pipeline
 # ─────────────────────────────────────────────────────────────────────────────
 
 def run(ecg: np.ndarray,
@@ -228,7 +229,6 @@ def run(ecg: np.ndarray,
     pos_texts = [t.lower() for t in observations[condition]["P"]]
     neg_texts = [t.lower() for t in observations[condition]["N"]]
 
-    # 1. Extract features matching author dimensions
     ecg_vec, ecg_seq, ecg_mask = encode_ecg(model, ecg, device)
 
     pos_vecs, pos_seqs, pos_masks = [], [], []
@@ -243,7 +243,6 @@ def run(ecg: np.ndarray,
 
     n_pairs = min(len(pos_vecs), len(neg_vecs))
     
-    # 2. Compute Similarities exactly via author matrix operations
     similarities_p = []
     similarities_n = []
     
@@ -257,7 +256,6 @@ def run(ecg: np.ndarray,
         similarities_p.append(sim_p)
         similarities_n.append(sim_n)
 
-    # 3. Apply Pairwise Softmax for global score tracking (using authors' 0.5)
     pos_probs_global = []
     for i in range(n_pairs):
         l_p = similarities_p[i] / SOFTMAX_TEMP
@@ -269,7 +267,6 @@ def run(ecg: np.ndarray,
     
     final_score = float(np.mean(pos_probs_global))
 
-    # 4. Calibration for local rendering (using VISUAL_TEMP to stretch output)
     pos_probabilities = []
     neg_probabilities = []
     
@@ -285,21 +282,12 @@ def run(ecg: np.ndarray,
         pos_probabilities.append(exp_p / total)
         neg_probabilities.append(exp_n / total)
 
-    # 5. Handle Localizations (Restricting calculation to non-padding tokens)
+    # Handle Localizations
     def localise(text_seq, text_mask):
-        # Obtain the cross-attention heatmap across all 128 tokens
         heatmap = get_cross_attention_heatmap(
             model, text_seq, text_mask, ecg_seq, ecg_mask, device
         )
-        
-        # FIX: Slice the heatmap to only include valid text tokens (exclude padding)
-        valid_length = int(text_mask.sum().item())
-        
-        # If the model added an extra </s> token or cls, protect the sequence bounds
-        # We look at the cross-attention matrix corresponding to the text sequence tokens
-        valid_heatmap = heatmap[:valid_length] 
-        
-        start_ms, end_ms, diffuse = heatmap_to_interval(valid_heatmap)
+        start_ms, end_ms, diffuse = heatmap_to_interval(heatmap)
         if diffuse or start_ms is None:
             return None, None, None
         lead_idx = pick_dominant_lead(ecg, start_ms, end_ms)
@@ -308,7 +296,6 @@ def run(ecg: np.ndarray,
     pos_locs = [localise(s, m) for s, m in zip(pos_seqs, pos_masks)]
     neg_locs = [localise(s, m) for s, m in zip(neg_seqs, neg_masks)]
 
-    # 6. Interface Print Dashboard Logs
     print()
     if ground_truth is not None:
         fold = ground_truth["strat_fold"]

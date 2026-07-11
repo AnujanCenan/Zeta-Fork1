@@ -284,10 +284,10 @@ def run(ecg: np.ndarray,
     pos_texts = [t.lower() for t in observations[condition]["P"]]
     neg_texts = [t.lower() for t in observations[condition]["N"]]
 
-    # ── encode ECG once ──────────────────────────────────────────────────────
+    # 1. Encode ECG Modality
     ecg_vec, ecg_seq, ecg_mask = encode_ecg(model, ecg, device)
 
-    # ── encode all observation texts ─────────────────────────────────────────
+    # 2. Encode Text Modalities
     pos_vecs, pos_seqs, pos_masks = [], [], []
     for t in pos_texts:
         v, s, m = encode_text(model, tokenizer, t, device)
@@ -298,14 +298,30 @@ def run(ecg: np.ndarray,
         v, s, m = encode_text(model, tokenizer, t, device)
         neg_vecs.append(v); neg_seqs.append(s); neg_masks.append(m)
 
-    # ── similarity scores (ZETA path) ────────────────────────────────────────
+    # 3. Calculate Scaled Pairwise Softmax Scores
     n_pairs = min(len(pos_vecs), len(neg_vecs))
-    pos_scores, neg_scores = pairwise_score(
-        ecg_vec, pos_vecs[:n_pairs], neg_vecs[:n_pairs]
-    )
-    final_score = float(np.mean(pos_scores))
+    
+    pos_scores, neg_scores = [], []
+    for p_vec, n_vec in zip(pos_vecs[:n_pairs], neg_vecs[:n_pairs]):
+        sim_p = (ecg_vec @ p_vec).item()
+        sim_n = (ecg_vec @ n_vec).item()
+        
+        # Explicit temperature scaling step
+        logit_p = sim_p / SOFTMAX_TEMP
+        logit_n = sim_n / SOFTMAX_TEMP
+        
+        max_logit = max(logit_p, logit_n)
+        exp_p = math.exp(logit_p - max_logit)
+        exp_n = math.exp(logit_n - max_logit)
+        total = exp_p + exp_n
+        
+        pos_scores.append(exp_p / total)
+        neg_scores.append(exp_n / total)
 
-    # ── cross-attention localisation for each observation ────────────────────
+    # Use max() instead of mean() for multi-feature rule activation mapping
+    final_score = float(np.max(pos_scores))
+
+    # 4. Cross-Attention Localization Maps
     def localise(text_seq, text_mask):
         heatmap = get_cross_attention_heatmap(
             model, text_seq, text_mask, ecg_seq, ecg_mask, device
@@ -319,19 +335,14 @@ def run(ecg: np.ndarray,
     pos_locs = [localise(s, m) for s, m in zip(pos_seqs, pos_masks)]
     neg_locs = [localise(s, m) for s, m in zip(neg_seqs, neg_masks)]
 
-    # ── print results ─────────────────────────────────────────────────────────
+    # 5. Dashboard Output Logs
     print()
-
     if ground_truth is not None:
         fold = ground_truth["strat_fold"]
         fold_note = " (official test set)" if fold == 10 else f" (fold {fold})"
         print(f"Report:     {ground_truth['report']}{fold_note}")
         print()
 
-        all_codes = (
-            [e[0] for e in ground_truth["confirmed"]] +
-            [e[0] for e in ground_truth["uncertain"]]
-        )
         if condition in [e[0] for e in ground_truth["confirmed"]]:
             gt_marker = f"✓  '{condition}' is CONFIRMED in this ECG (likelihood 100%)"
         elif condition in [e[0] for e in ground_truth["uncertain"]]:
@@ -339,69 +350,28 @@ def run(ecg: np.ndarray,
             gt_marker = f"~  '{condition}' is UNCERTAIN in this ECG (likelihood {match[1]:.0f}%)"
         else:
             gt_marker = f"✗  '{condition}' is NOT labelled in this ECG"
-        print(f"Ground truth:  {gt_marker}")
+        print(f"Ground truth:  {gt_marker}\n")
 
-        if ground_truth["confirmed"]:
-            print("  Confirmed (100%):")
-            for code, likelihood, desc, cats in ground_truth["confirmed"]:
-                cat_parts = []
-                if cats.get("diagnostic_class"):
-                    cat_parts.append(f"class={cats['diagnostic_class']}")
-                if cats.get("diagnostic_subclass"):
-                    cat_parts.append(f"sub={cats['diagnostic_subclass']}")
-                if cats.get("rhythm"):
-                    cat_parts.append("rhythm")
-                if cats.get("form"):
-                    cat_parts.append("form")
-                cat_str = ", ".join(cat_parts) if cat_parts else "—"
-                print(f"    {code:<12} {desc:<40} [{cat_str}]")
+    print(f"Condition: {condition}  (final score: {final_score:.2f})\n")
 
-        if ground_truth["uncertain"]:
-            print("  Uncertain (<100%):")
-            for code, likelihood, desc, cats in ground_truth["uncertain"]:
-                print(f"    {code:<12} {desc:<40} [{likelihood:.0f}%]")
-        print()
-
-    print(f"Condition: {condition}  (final score: {final_score:.2f})")
-    print()
-
-    col_obs  = 45
-    col_scr  = 7
-    col_loc  = 22
-    col_bar  = 10
-
-    header = (
-        f"  {'Observation':<{col_obs}}"
-        f"{'Score':>{col_scr}}  "
-        f"{'Localization':<{col_loc}}"
-        f"{'Strength'}"
-    )
+    col_obs, col_scr, col_loc, col_bar = 45, 7, 22, 10
+    header = f"  {'Observation':<{col_obs}}{'Score':>{col_scr}}  {'Localization':<{col_loc}}{'Strength'}"
     print(header)
     print("  " + "─" * (col_obs + col_scr + col_loc + col_bar + 20))
 
     def format_row(tag, text, score, loc, is_positive):
         start_ms, end_ms, lead_idx = loc
-        if start_ms is not None:
-            loc_str = f"{start_ms}ms – {end_ms}ms  {LEAD_NAMES[lead_idx]}"
-        else:
-            loc_str = "diffuse"
+        loc_str = f"{start_ms}ms – {end_ms}ms  {LEAD_NAMES[lead_idx]}" if start_ms is not None else "diffuse"
         bar, label = strength_label(score, is_positive)
         obs_str = f"[{tag}] {text}"
-        print(
-            f"  {obs_str:<{col_obs}}"
-            f"{score:>{col_scr}.2f}  "
-            f"{loc_str:<{col_loc}}"
-            f"{bar}  {label}"
-        )
+        print(f"  {obs_str:<{col_obs}}{score:>{col_scr}.2f}  {loc_str:<{col_loc}}{bar}  {label}")
 
-    for i, (text, score, loc) in enumerate(zip(pos_texts, pos_scores, pos_locs)):
-        format_row("P", text, score, loc, is_positive=True)
+    for i in range(n_pairs):
+        format_row("P", pos_texts[i], pos_scores[i], pos_locs[i], is_positive=True)
     print()
-
-    for i, (text, score, loc) in enumerate(zip(neg_texts, neg_scores, neg_locs)):
-        format_row("N", text, score, loc, is_positive=False)
+    for i in range(n_pairs):
+        format_row("N", neg_texts[i], neg_scores[i], neg_locs[i], is_positive=False)
     print()
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Entry point utils

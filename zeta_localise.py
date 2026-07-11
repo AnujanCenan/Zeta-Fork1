@@ -127,35 +127,30 @@ def pairwise_score(ecg_vec: torch.Tensor,
                    pos_vecs: list[torch.Tensor],
                    neg_vecs: list[torch.Tensor]) -> tuple[list[float], list[float]]:
     """
-    Computes a global softmax across all candidate observation text vectors 
-    simultaneously, matching ZETA's contrastive space deployment strategy.
+    Computes a binary softmax for each distinct (Pos, Neg) feature pair independently,
+    properly scaling the raw cosine similarities by the contrastive temperature 
+    before exponentiation to widen the dynamic range.
     """
-    n_pairs = min(len(pos_vecs), len(neg_vecs))
-    
-    # Slice vectors to match pairs length
-    p_vecs = pos_vecs[:n_pairs]
-    n_vecs = neg_vecs[:n_pairs]
-
-    # Stack into matrices: shape (n_pairs, 768)
-    P = torch.stack(p_vecs)
-    N = torch.stack(n_vecs)
-
-    # 1. Compute all raw similarities simultaneously
-    sim_p = ecg_vec @ P.T  # shape: (n_pairs,)
-    sim_n = ecg_vec @ N.T  # shape: (n_pairs,)
-
-    # 2. Combine all logits into a single global pool: shape (2 * n_pairs,)
-    all_logits = torch.cat([sim_p, sim_n]) / SOFTMAX_TEMP
-
-    # 3. Apply global Softmax normalization across the entire contrastive field
-    all_probs = F.softmax(all_logits, dim=0)
-
-    # 4. Split probabilities back into their matching positive and negative buckets
-    pos_probs = all_probs[:n_pairs].tolist()
-    neg_probs = all_probs[n_pairs:].tolist()
-
-    return pos_probs, neg_probs
-
+    pos_scores, neg_scores = [], []
+    for p_vec, n_vec in zip(pos_vecs, neg_vecs):
+        # 1. Get raw cosine similarities (dot product of L2-normalized vectors)
+        sim_p = (ecg_vec @ p_vec).item()
+        sim_n = (ecg_vec @ n_vec).item()
+        
+        # 2. Scale by the contrastive temperature (dividing by 0.07 multiplying by ~14.3)
+        logit_p = sim_p / SOFTMAX_TEMP
+        logit_n = sim_n / SOFTMAX_TEMP
+        
+        # 3. Compute stable binary softmax
+        max_logit = max(logit_p, logit_n)
+        exp_p = math.exp(logit_p - max_logit)
+        exp_n = math.exp(logit_n - max_logit)
+        total = exp_p + exp_n
+        
+        pos_scores.append(exp_p / total)
+        neg_scores.append(exp_n / total)
+        
+    return pos_scores, neg_scores
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Cross-attention localisation
@@ -255,26 +250,21 @@ def pick_dominant_lead(ecg: np.ndarray,
 # Strength label
 # ─────────────────────────────────────────────────────────────────────────────
 
-def strength_label(score: float, is_positive: bool, companion_score: float) -> tuple[str, str]:
+def strength_label(score: float, is_positive: bool) -> tuple[str, str]:
     """
-    Evaluates evidence by checking the relative ratio between the positive 
-    observation and its matching negative counterpart.
+    Determines UI highlight levels using absolute binary probability thresholds.
     """
-    # Calculate relative probability between this specific pair
-    total = score + companion_score + 1e-8
-    relative_score = score / total
-    
-    effective = relative_score if is_positive else (1.0 - relative_score)
+    effective = score if is_positive else (1.0 - score)
 
-    if effective >= 0.65:
+    if effective >= 0.70:
         return "████████", "highlight strongly"
-    elif effective >= 0.55:
+    elif effective >= 0.58:
         return "██████  ", "highlight moderately"
-    elif effective >= 0.48:
+    elif effective >= 0.52:
         return "████    ", "highlight weakly"
     else:
         return "░░      ", "suppress"
-
+    
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Main pipeline
@@ -389,15 +379,13 @@ def run(ecg: np.ndarray,
     print(header)
     print("  " + "─" * (col_obs + col_scr + col_loc + col_bar + 20))
 
-    def format_row(tag, text, score, loc, is_positive, companion_score):
+    def format_row(tag, text, score, loc, is_positive):
         start_ms, end_ms, lead_idx = loc
         if start_ms is not None:
             loc_str = f"{start_ms}ms – {end_ms}ms  {LEAD_NAMES[lead_idx]}"
         else:
             loc_str = "diffuse"
-        
-        # Pass companion score to calculate localized pair strength
-        bar, label = strength_label(score, is_positive, companion_score)
+        bar, label = strength_label(score, is_positive)
         obs_str = f"[{tag}] {text}"
         print(
             f"  {obs_str:<{col_obs}}"
@@ -407,11 +395,11 @@ def run(ecg: np.ndarray,
         )
 
     for i, (text, score, loc) in enumerate(zip(pos_texts, pos_scores, pos_locs)):
-        format_row("P", text, score, loc, is_positive=True, companion_score=neg_scores[i])
+        format_row("P", text, score, loc, is_positive=True)
     print()
 
     for i, (text, score, loc) in enumerate(zip(neg_texts, neg_scores, neg_locs)):
-        format_row("N", text, score, loc, is_positive=False, companion_score=pos_scores[i])
+        format_row("N", text, score, loc, is_positive=False)
     print()
 
 

@@ -285,12 +285,21 @@ def run(ecg: np.ndarray,
         pos_probabilities.append(exp_p / total)
         neg_probabilities.append(exp_n / total)
 
-    # 5. Handle Localizations
+    # 5. Handle Localizations (Restricting calculation to non-padding tokens)
     def localise(text_seq, text_mask):
+        # Obtain the cross-attention heatmap across all 128 tokens
         heatmap = get_cross_attention_heatmap(
             model, text_seq, text_mask, ecg_seq, ecg_mask, device
         )
-        start_ms, end_ms, diffuse = heatmap_to_interval(heatmap)
+        
+        # FIX: Slice the heatmap to only include valid text tokens (exclude padding)
+        valid_length = int(text_mask.sum().item())
+        
+        # If the model added an extra </s> token or cls, protect the sequence bounds
+        # We look at the cross-attention matrix corresponding to the text sequence tokens
+        valid_heatmap = heatmap[:valid_length] 
+        
+        start_ms, end_ms, diffuse = heatmap_to_interval(valid_heatmap)
         if diffuse or start_ms is None:
             return None, None, None
         lead_idx = pick_dominant_lead(ecg, start_ms, end_ms)

@@ -8,8 +8,12 @@ PTBXL_PATH = os.getenv("PTBXL_DATASET")
 
 
 db = pd.read_csv(os.path.join(PTBXL_PATH, 'ptbxl_database.csv'), index_col='ecg_id')
+count = 0
 for eid, row in db.iterrows():
     codes = ast.literal_eval(row['scp_codes'])
     if 'CRBBB' in codes and codes['CRBBB'] == 100.0:
         print(eid, codes)
+        count += 1
+
+    if count == 20:
         break
